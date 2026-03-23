@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>LinkUrl__c</fullName>
+    <label>Link URL</label>
+    <type>Text</type>
+    <length>255</length>
+    <isFilteringDisabled>false</isFilteringDisabled>
+    <isNameField>false</isNameField>
+    <isSortingDisabled>false</isSortingDisabled>
+    <description>Clicked URL (for click events)</description>
+</CustomField>

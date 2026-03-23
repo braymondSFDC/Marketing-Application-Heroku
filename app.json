@@ -1,0 +1,48 @@
+{
+  "name": "Marketing Journey Builder",
+  "description": "A drag-and-drop marketing journey builder hosted on Heroku, embedded in Salesforce via Canvas",
+  "repository": "https://github.com/BenoitBenBen/Marketing-Application-Heroku",
+  "keywords": ["salesforce", "heroku", "canvas", "journey-builder", "marketing"],
+  "stack": "heroku-24",
+  "env": {
+    "CANVAS_CONSUMER_SECRET": {
+      "description": "Consumer Secret from Salesforce Connected App",
+      "required": true
+    },
+    "SF_CLIENT_ID": {
+      "description": "Consumer Key from Salesforce Connected App",
+      "required": true
+    },
+    "SF_CLIENT_SECRET": {
+      "description": "Consumer Secret from Salesforce Connected App",
+      "required": true
+    },
+    "SF_LOGIN_URL": {
+      "description": "Salesforce login URL",
+      "value": "https://login.salesforce.com"
+    },
+    "WEBHOOK_SECRET": {
+      "description": "Shared secret for verifying webhook payloads from Salesforce",
+      "required": true
+    },
+    "SESSION_SECRET": {
+      "description": "Secret for Express session encryption",
+      "generator": "secret"
+    },
+    "NODE_ENV": {
+      "description": "Node environment",
+      "value": "production"
+    }
+  },
+  "formation": {
+    "web": { "quantity": 1, "size": "standard-1x" },
+    "worker": { "quantity": 1, "size": "standard-1x" }
+  },
+  "addons": [
+    { "plan": "heroku-postgresql:essential-0" },
+    { "plan": "heroku-redis:mini" }
+  ],
+  "buildpacks": [
+    { "url": "heroku/nodejs" }
+  ]
+}
