@@ -123,6 +123,7 @@ function CanvasInner({ journeyId, onBack }) {
   const { journey } = useJourney(journeyId);
   useRealtimeStats(journeyId);
   const { screenToFlowPosition } = useReactFlow();
+  const storeStatus = useJourneyStore((s) => s.status);
 
   // Zustand store — used for persistence and cross-component access
   const storeNodes = useJourneyStore((s) => s.nodes);
@@ -144,9 +145,12 @@ function CanvasInner({ journeyId, onBack }) {
   const [isDirty, setIsDirty] = useState(false);
   const initialSnap = useRef(JSON.stringify({ nodes: storeNodesToRF(storeNodes), edges: storeEdgesToRF(storeEdges) }));
   useEffect(() => {
-    const snap = JSON.stringify({ n: nodes.map(n => n.id + n.type + n.position.x + n.position.y), e: edges.map(e => e.id) });
-    const init = JSON.stringify({ n: JSON.parse(initialSnap.current).nodes.map(n => n.id + n.type + n.position.x + n.position.y), e: JSON.parse(initialSnap.current).edges.map(e => e.id) });
-    setIsDirty(snap !== init);
+    try {
+      const snap = JSON.stringify({ n: nodes.map(n => n.id + n.type + (n.position?.x ?? 0) + (n.position?.y ?? 0)), e: edges.map(e => e.id) });
+      const parsed = JSON.parse(initialSnap.current);
+      const init = JSON.stringify({ n: (parsed.nodes || []).map(n => n.id + n.type + (n.position?.x ?? 0) + (n.position?.y ?? 0)), e: (parsed.edges || []).map(e => e.id) });
+      setIsDirty(snap !== init);
+    } catch (err) { /* ignore during initial render */ }
   }, [nodes, edges]);
 
   // Keyboard shortcuts: Ctrl+Z = undo, Ctrl+Shift+Z / Ctrl+Y = redo, Ctrl+S = save
@@ -253,6 +257,28 @@ function CanvasInner({ journeyId, onBack }) {
 
     setNodes((nds) => [...nds, newNode]);
   }, [screenToFlowPosition, setNodes]);
+
+  // Show loading state while journey is being fetched
+  if (!journey && storeStatus === 'loading') {
+    return (
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', flexDirection: 'column', gap: '16px' }}>
+        <div style={{ width: '40px', height: '40px', border: '3px solid #e5e5e5', borderTopColor: '#0176d3', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
+        <p style={{ color: '#6b7280', fontSize: '14px' }}>Loading journey...</p>
+      </div>
+    );
+  }
+
+  // If journey failed to load, show error with back button
+  if (!journey && storeStatus !== 'loading') {
+    return (
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', flexDirection: 'column', gap: '16px' }}>
+        <p style={{ color: '#ea001e', fontSize: '16px' }}>Failed to load journey</p>
+        <button onClick={onBack} style={{ background: '#0176d3', color: '#fff', border: 'none', borderRadius: '8px', padding: '10px 20px', fontSize: '14px', cursor: 'pointer' }}>
+          ← Back to Journeys
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div style={styles.container}>

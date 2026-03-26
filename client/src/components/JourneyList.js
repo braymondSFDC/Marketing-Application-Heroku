@@ -19,12 +19,16 @@ export default function JourneyList({ onSelectJourney }) {
 
   const handleCreate = async () => {
     if (!newName.trim()) return;
-    const journey = await createJourney({
-      name: newName.trim(),
-      segment_object: newSegment,
-    });
-    if (journey) {
-      onSelectJourney(journey.id);
+    try {
+      const journey = await createJourney({
+        name: newName.trim(),
+        segment_object: newSegment,
+      });
+      if (journey && journey.id) {
+        onSelectJourney(journey.id);
+      }
+    } catch (err) {
+      console.error('Failed to create journey:', err);
     }
     setNewName('');
     setShowCreate(false);

@@ -13,7 +13,9 @@ const session = require('express-session');
 const morgan = require('morgan');
 const rateLimit = require('express-rate-limit');
 
+const fs = require('fs');
 const { initializeWebSocket } = require('./src/websocket');
+const db = require('./db');
 const authRoutes = require('./src/api/routes/auth');
 const journeyRoutes = require('./src/api/routes/journeys');
 const nodeRoutes = require('./src/api/routes/nodes');
@@ -136,6 +138,60 @@ app.use((err, _req, res, _next) => {
 });
 
 // ---------------------------------------------------------------------------
+// Auto-migrate database on startup
+// ---------------------------------------------------------------------------
+
+async function runMigrations() {
+  const client = await db.getClient();
+  try {
+    // Create migrations tracking table
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS _migrations (
+        id SERIAL PRIMARY KEY,
+        filename VARCHAR(255) NOT NULL UNIQUE,
+        applied_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+
+    // Get already-applied migrations
+    const applied = await client.query('SELECT filename FROM _migrations ORDER BY id');
+    const appliedSet = new Set(applied.rows.map((r) => r.filename));
+
+    // Read migration files
+    const migrationsDir = path.join(__dirname, 'db', 'migrations');
+    const files = fs.readdirSync(migrationsDir)
+      .filter((f) => f.endsWith('.sql'))
+      .sort();
+
+    for (const file of files) {
+      if (appliedSet.has(file)) {
+        console.log(`[DB] ✓ Already applied: ${file}`);
+        continue;
+      }
+
+      console.log(`[DB] ▶ Applying: ${file}`);
+      const sql = fs.readFileSync(path.join(migrationsDir, file), 'utf8');
+
+      await client.query('BEGIN');
+      try {
+        await client.query(sql);
+        await client.query('INSERT INTO _migrations (filename) VALUES ($1)', [file]);
+        await client.query('COMMIT');
+        console.log(`[DB] ✓ Applied: ${file}`);
+      } catch (err) {
+        await client.query('ROLLBACK');
+        console.error(`[DB] ✗ Failed: ${file}`, err.message);
+        throw err;
+      }
+    }
+
+    console.log('[DB] ✅ All migrations applied successfully.');
+  } finally {
+    client.release();
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Start server + WebSocket
 // ---------------------------------------------------------------------------
 
@@ -144,10 +200,21 @@ const PORT = process.env.PORT || 3001;
 const io = initializeWebSocket(server);
 app.set('io', io);
 
-server.listen(PORT, () => {
-  console.log(`🚀 Marketing Journey Builder running on port ${PORT}`);
-  console.log(`   Environment: ${process.env.NODE_ENV || 'development'}`);
-  console.log(`   Mode: Standalone`);
-});
+// Run migrations, then start listening
+runMigrations()
+  .then(() => {
+    server.listen(PORT, () => {
+      console.log(`🚀 Marketing Journey Builder running on port ${PORT}`);
+      console.log(`   Environment: ${process.env.NODE_ENV || 'development'}`);
+      console.log(`   Mode: Standalone`);
+    });
+  })
+  .catch((err) => {
+    console.error('[DB] Migration failed — starting server anyway:', err.message);
+    // Start server even if migrations fail, so health check works
+    server.listen(PORT, () => {
+      console.log(`🚀 Marketing Journey Builder running on port ${PORT} (DB migrations failed)`);
+    });
+  });
 
 module.exports = { app, server };
