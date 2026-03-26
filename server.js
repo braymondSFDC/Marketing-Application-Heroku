@@ -227,12 +227,14 @@ app.set('io', io);
 server.listen(PORT, () => {
   console.log(`🚀 Marketing Journey Builder running on port ${PORT}`);
   console.log(`   Environment: ${process.env.NODE_ENV || 'development'}`);
-  console.log(`   Mode: Standalone`);
+  console.log(`   Mode: Standalone (${db.mode === 'postgres' ? 'PostgreSQL' : 'In-Memory'})`);
 
-  // Run migrations in the background after server is listening
-  runMigrations()
-    .then(() => console.log('[DB] Migrations complete — app fully ready.'))
-    .catch((err) => console.error('[DB] Migration failed:', err.message));
+  // Only run migrations if we have a real database
+  if (db.mode === 'postgres') {
+    runMigrations()
+      .then(() => console.log('[DB] Migrations complete — app fully ready.'))
+      .catch((err) => console.error('[DB] Migration failed:', err.message));
+  }
 });
 
 module.exports = { app, server };
