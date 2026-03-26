@@ -2,10 +2,14 @@
 
 const crypto = require('crypto');
 
+// ---------------------------------------------------------------------------
+// CANVAS AUTH — preserved for future Canvas integration
+// ---------------------------------------------------------------------------
+
 /**
  * Verify a Salesforce Canvas signed request.
- * The signed request is a base64-encoded signature + '.' + base64-encoded JSON envelope.
- * HMAC-SHA256 is used with the Connected App consumer secret.
+ * HMAC-SHA256 with Connected App consumer secret.
+ * NOTE: Preserved for future use when Canvas license is available.
  */
 function verifySignedRequest(signedRequest, consumerSecret) {
   if (!signedRequest || !consumerSecret) {
@@ -32,20 +36,42 @@ function verifySignedRequest(signedRequest, consumerSecret) {
   return JSON.parse(Buffer.from(encodedEnvelope, 'base64').toString('utf8'));
 }
 
+// ---------------------------------------------------------------------------
+// STANDALONE AUTH — session-based, no Canvas dependency
+// ---------------------------------------------------------------------------
+
 /**
- * Express middleware — requires a valid Canvas session.
- * Canvas context is stored in req.session.canvasContext after the initial POST.
+ * Default org context used in standalone mode.
+ * Configurable via environment variables.
  */
-function requireCanvasAuth(req, res, next) {
-  if (!req.session || !req.session.canvasContext) {
-    return res.status(401).json({ error: 'Unauthorized — no Canvas session' });
+function getDefaultOrgContext() {
+  return {
+    orgId: process.env.SF_ORG_ID || 'standalone-org',
+    orgName: process.env.SF_ORG_NAME || 'Marketing Journey Builder',
+    userId: process.env.SF_USER_ID || 'standalone-user',
+    userName: process.env.SF_USERNAME || 'admin@journeybuilder.app',
+    fullName: process.env.SF_USER_FULLNAME || 'Journey Builder Admin',
+    instanceUrl: process.env.SF_INSTANCE_URL || null,
+  };
+}
+
+/**
+ * Express middleware — ensures a valid session context exists.
+ *
+ * In standalone mode, auto-initializes the session with default org context.
+ * Attaches convenience properties to req for route handlers.
+ */
+function requireAuth(req, res, next) {
+  if (!req.session.appContext) {
+    req.session.appContext = getDefaultOrgContext();
   }
 
-  // Attach convenience properties
-  req.sfOrgId = req.session.canvasContext.context.organization.organizationId;
-  req.sfUserId = req.session.canvasContext.context.user.userId;
-  req.sfInstanceUrl = req.session.canvasContext.client.instanceUrl;
-  req.sfOauthToken = req.session.canvasContext.client.oauthToken;
+  const ctx = req.session.appContext;
+
+  req.sfOrgId = ctx.orgId;
+  req.sfUserId = ctx.userId;
+  req.sfInstanceUrl = ctx.instanceUrl || null;
+  req.sfOauthToken = ctx.oauthToken || null;
 
   next();
 }
@@ -77,6 +103,7 @@ function verifyWebhookSignature(req, res, next) {
 
 module.exports = {
   verifySignedRequest,
-  requireCanvasAuth,
+  requireAuth,
   verifyWebhookSignature,
+  getDefaultOrgContext,
 };

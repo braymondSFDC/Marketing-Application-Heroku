@@ -48,7 +48,7 @@ export default function LaunchButton({ journey }) {
           <div style={styles.confirmCard}>
             <h4 style={{ margin: '0 0 8px 0', fontSize: '14px' }}>Launch Journey?</h4>
             <p style={{ margin: '0 0 12px 0', fontSize: '13px', color: '#6b7280' }}>
-              This will create a Salesforce Campaign, deploy a Flow, and start sending.
+              This will activate the journey and begin the launch sequence.
             </p>
             <div style={{ display: 'flex', gap: '8px' }}>
               <button style={styles.confirmBtn} onClick={handleLaunch}>

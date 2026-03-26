@@ -5,7 +5,7 @@ import JourneyCanvas from './components/Canvas/JourneyCanvas';
 import JourneyList from './components/JourneyList';
 
 export default function App() {
-  const { canvasContext, loading: ctxLoading, error: ctxError } = useCanvasContext();
+  const { canvasContext, loading: ctxLoading } = useCanvasContext();
   const [view, setView] = useState('list'); // 'list' or 'canvas'
   const [activeJourneyId, setActiveJourneyId] = useState(null);
   const fetchJourneys = useJourneyStore((s) => s.fetchJourneys);
@@ -20,16 +20,7 @@ export default function App() {
     return (
       <div style={styles.loadingContainer}>
         <div style={styles.spinner} />
-        <p style={styles.loadingText}>Connecting to Salesforce...</p>
-      </div>
-    );
-  }
-
-  if (ctxError) {
-    return (
-      <div style={styles.errorContainer}>
-        <h2 style={styles.errorTitle}>Connection Error</h2>
-        <p style={styles.errorText}>{ctxError}</p>
+        <p style={styles.loadingText}>Loading Journey Builder...</p>
       </div>
     );
   }
@@ -75,22 +66,6 @@ const styles = {
     animation: 'spin 0.8s linear infinite',
   },
   loadingText: {
-    color: '#6b7280',
-    fontSize: '14px',
-  },
-  errorContainer: {
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'center',
-    justifyContent: 'center',
-    height: '100vh',
-    gap: '8px',
-  },
-  errorTitle: {
-    color: '#ea001e',
-    fontSize: '18px',
-  },
-  errorText: {
     color: '#6b7280',
     fontSize: '14px',
   },

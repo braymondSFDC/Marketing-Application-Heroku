@@ -35,7 +35,7 @@ export default function JourneyList({ onSelectJourney }) {
       <div style={styles.header}>
         <div>
           <h1 style={styles.title}>Journey Builder</h1>
-          <p style={styles.subtitle}>Design and launch marketing journeys as Salesforce Flows</p>
+          <p style={styles.subtitle}>Design, build, and launch multi-step marketing journeys</p>
         </div>
         <button style={styles.createBtn} onClick={() => setShowCreate(true)}>
           + New Journey

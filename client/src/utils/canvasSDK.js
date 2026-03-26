@@ -1,6 +1,9 @@
 /**
- * Salesforce Canvas SDK utility.
- * Handles communication between the Heroku iframe and the parent Salesforce window.
+ * Canvas SDK utility (preserved for future Canvas integration).
+ *
+ * In standalone mode, all functions are graceful no-ops.
+ * When running inside a Salesforce Canvas iframe, these functions
+ * interact with the parent Salesforce window via the Canvas SDK.
  */
 
 /**
@@ -30,6 +33,7 @@ export function refreshSignedRequest(callback) {
 
 /**
  * Navigate the parent Salesforce window to a URL.
+ * Falls back to window.open in standalone mode.
  */
 export function navigateToSalesforce(url) {
   if (window.Sfdc && window.Sfdc.canvas) {

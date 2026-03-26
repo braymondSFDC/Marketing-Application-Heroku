@@ -14,7 +14,7 @@ const morgan = require('morgan');
 const rateLimit = require('express-rate-limit');
 
 const { initializeWebSocket } = require('./src/websocket');
-const canvasRoutes = require('./src/api/routes/canvas');
+const authRoutes = require('./src/api/routes/auth');
 const journeyRoutes = require('./src/api/routes/journeys');
 const nodeRoutes = require('./src/api/routes/nodes');
 const launchRoutes = require('./src/api/routes/launch');
@@ -31,41 +31,30 @@ const server = http.createServer(app);
 app.use(morgan('combined'));
 app.use(compression());
 
-// Helmet — allow Salesforce Canvas iframe embedding
+// Helmet — standalone mode (no iframe embedding needed)
 app.use(
   helmet({
     contentSecurityPolicy: {
       directives: {
         defaultSrc: ["'self'"],
-        scriptSrc: ["'self'", "'unsafe-inline'", '*.salesforce.com', '*.force.com'],
+        scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'"],
         styleSrc: ["'self'", "'unsafe-inline'", 'fonts.googleapis.com'],
         fontSrc: ["'self'", 'fonts.gstatic.com'],
-        imgSrc: ["'self'", 'data:', '*.salesforce.com'],
-        connectSrc: ["'self'", 'wss:', 'ws:', '*.salesforce.com', '*.force.com'],
-        frameSrc: ["'self'", '*.salesforce.com', '*.force.com'],
-        frameAncestors: ['*.salesforce.com', '*.force.com', '*.lightning.force.com', '*.visualforce.com'],
+        imgSrc: ["'self'", 'data:', 'blob:'],
+        connectSrc: ["'self'", 'wss:', 'ws:'],
       },
     },
-    crossOriginEmbedderPolicy: false,
-    crossOriginOpenerPolicy: false,
   })
 );
 
 app.use(
   cors({
     origin: (origin, cb) => {
-      // Allow Salesforce domains & no-origin (same-origin requests)
-      if (
-        !origin ||
-        /\.salesforce\.com$/.test(origin) ||
-        /\.force\.com$/.test(origin) ||
-        /\.lightning\.force\.com$/.test(origin) ||
-        /\.visualforce\.com$/.test(origin) ||
-        origin === `http://localhost:${process.env.PORT || 3001}`
-      ) {
+      // Allow same-origin and localhost in dev
+      if (!origin || /localhost/.test(origin)) {
         cb(null, true);
       } else {
-        cb(new Error('Blocked by CORS'));
+        cb(null, true); // Standalone mode — accept all origins
       }
     },
     credentials: true,
@@ -76,7 +65,7 @@ app.use(cookieParser());
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
-// Session — stores Canvas context server-side
+// Session — standalone mode
 app.use(
   session({
     secret: process.env.SESSION_SECRET || 'dev-secret-change-me',
@@ -85,7 +74,7 @@ app.use(
     cookie: {
       secure: process.env.NODE_ENV === 'production',
       httpOnly: true,
-      sameSite: 'none', // Required for iframe (Canvas) embedding
+      sameSite: 'lax',
       maxAge: 24 * 60 * 60 * 1000, // 24 hours
     },
   })
@@ -104,8 +93,8 @@ app.use('/api/', limiter);
 // Routes
 // ---------------------------------------------------------------------------
 
-// Canvas signed-request POST endpoint (no JSON parse — raw form body)
-app.use('/canvas', canvasRoutes);
+// Auth routes (standalone session management)
+app.use('/auth', authRoutes);
 
 // REST API
 app.use('/api/journeys', journeyRoutes);
@@ -128,7 +117,7 @@ if (process.env.NODE_ENV === 'production') {
 
   // All non-API routes → React index.html
   app.get('*', (req, res) => {
-    if (req.path.startsWith('/api') || req.path.startsWith('/canvas')) return;
+    if (req.path.startsWith('/api') || req.path.startsWith('/auth')) return;
     res.sendFile(path.join(__dirname, 'client', 'build', 'index.html'));
   });
 }
@@ -156,6 +145,7 @@ app.set('io', io);
 server.listen(PORT, () => {
   console.log(`🚀 Marketing Journey Builder running on port ${PORT}`);
   console.log(`   Environment: ${process.env.NODE_ENV || 'development'}`);
+  console.log(`   Mode: Standalone`);
 });
 
 module.exports = { app, server };

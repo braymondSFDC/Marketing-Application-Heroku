@@ -3,8 +3,7 @@
 const express = require('express');
 const router = express.Router();
 const db = require('../../../db');
-const { requireCanvasAuth } = require('../middleware/auth');
-const { injectSalesforceContext } = require('../middleware/sfContext');
+const { requireAuth } = require('../middleware/auth');
 const { Queue } = require('bullmq');
 const { Redis } = require('ioredis');
 
@@ -22,7 +21,7 @@ function getLaunchQueue() {
   return launchQueue;
 }
 
-router.use(requireCanvasAuth);
+router.use(requireAuth);
 
 /**
  * POST /api/journeys/:id/launch
@@ -36,7 +35,7 @@ router.use(requireCanvasAuth);
  *   6. Publish Platform Events
  *   7. Post to Chatter
  */
-router.post('/:id/launch', injectSalesforceContext, async (req, res) => {
+router.post('/:id/launch', async (req, res) => {
   try {
     const { id } = req.params;
 

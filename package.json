@@ -1,7 +1,7 @@
 {
   "name": "marketing-journey-builder",
   "version": "1.0.0",
-  "description": "Marketing Journey Builder — Heroku + Salesforce Canvas",
+  "description": "Marketing Journey Builder — Standalone Heroku Application",
   "main": "server.js",
   "engines": {
     "node": "20.x",

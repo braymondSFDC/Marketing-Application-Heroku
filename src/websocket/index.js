@@ -12,18 +12,8 @@ function initializeWebSocket(httpServer) {
   const io = new Server(httpServer, {
     cors: {
       origin: (origin, cb) => {
-        if (
-          !origin ||
-          /\.salesforce\.com$/.test(origin) ||
-          /\.force\.com$/.test(origin) ||
-          /\.lightning\.force\.com$/.test(origin) ||
-          /\.visualforce\.com$/.test(origin) ||
-          /localhost/.test(origin)
-        ) {
-          cb(null, true);
-        } else {
-          cb(new Error('WebSocket CORS blocked'));
-        }
+        // Standalone mode — accept all origins
+        cb(null, true);
       },
       credentials: true,
     },

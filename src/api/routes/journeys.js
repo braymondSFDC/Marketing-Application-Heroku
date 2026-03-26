@@ -4,10 +4,10 @@ const express = require('express');
 const router = express.Router();
 const { v4: uuidv4 } = require('uuid');
 const db = require('../../../db');
-const { requireCanvasAuth } = require('../middleware/auth');
+const { requireAuth } = require('../middleware/auth');
 
-// All journey routes require Canvas authentication
-router.use(requireCanvasAuth);
+// All journey routes require authentication
+router.use(requireAuth);
 
 /**
  * GET /api/journeys

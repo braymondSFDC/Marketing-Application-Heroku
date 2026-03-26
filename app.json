@@ -1,33 +1,25 @@
 {
   "name": "Marketing Journey Builder",
-  "description": "A drag-and-drop marketing journey builder hosted on Heroku, embedded in Salesforce via Canvas",
-  "repository": "https://github.com/BenoitBenBen/Marketing-Application-Heroku",
-  "keywords": ["salesforce", "heroku", "canvas", "journey-builder", "marketing"],
+  "description": "A drag-and-drop marketing journey builder — standalone Heroku application. Canvas integration preserved for future use.",
+  "repository": "https://github.com/braymondSFDC/Marketing-Application-Heroku",
+  "keywords": ["heroku", "journey-builder", "marketing", "react-flow", "drag-and-drop"],
   "stack": "heroku-24",
   "env": {
-    "CANVAS_CONSUMER_SECRET": {
-      "description": "Consumer Secret from Salesforce Connected App",
-      "required": true
-    },
-    "SF_CLIENT_ID": {
-      "description": "Consumer Key from Salesforce Connected App",
-      "required": true
-    },
-    "SF_CLIENT_SECRET": {
-      "description": "Consumer Secret from Salesforce Connected App",
-      "required": true
-    },
-    "SF_LOGIN_URL": {
-      "description": "Salesforce login URL",
-      "value": "https://login.salesforce.com"
-    },
-    "WEBHOOK_SECRET": {
-      "description": "Shared secret for verifying webhook payloads from Salesforce",
-      "required": true
-    },
     "SESSION_SECRET": {
       "description": "Secret for Express session encryption",
       "generator": "secret"
+    },
+    "WEBHOOK_SECRET": {
+      "description": "Shared secret for verifying webhook payloads (optional in standalone mode)",
+      "required": false
+    },
+    "SF_ORG_ID": {
+      "description": "Salesforce Org ID for standalone mode (optional)",
+      "required": false
+    },
+    "SF_ORG_NAME": {
+      "description": "Display name for the org (optional)",
+      "value": "Marketing Journey Builder"
     },
     "NODE_ENV": {
       "description": "Node environment",

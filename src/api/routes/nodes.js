@@ -4,9 +4,9 @@ const express = require('express');
 const router = express.Router();
 const { v4: uuidv4 } = require('uuid');
 const db = require('../../../db');
-const { requireCanvasAuth } = require('../middleware/auth');
+const { requireAuth } = require('../middleware/auth');
 
-router.use(requireCanvasAuth);
+router.use(requireAuth);
 
 /**
  * POST /api/journeys/:journeyId/nodes
