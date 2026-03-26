@@ -18,24 +18,71 @@ function getSalesforceConnection(accessToken, instanceUrl) {
 
 /**
  * Create a connection using OAuth2 client credentials for background worker operations.
- * Uses refresh token flow for long-lived access.
+ * Supports three authentication modes:
+ *   1. Refresh token flow (if refreshToken provided)
+ *   2. Username/password + security token flow (SF_USERNAME + SF_PASSWORD)
+ *   3. Client credentials flow (SF_CLIENT_ID + SF_CLIENT_SECRET only — requires Connected App)
  */
 async function getWorkerConnection(refreshToken) {
+  const loginUrl = process.env.SF_LOGIN_URL || 'https://login.salesforce.com';
+  const clientId = process.env.SF_CLIENT_ID;
+  const clientSecret = process.env.SF_CLIENT_SECRET;
+
   const conn = new jsforce.Connection({
     oauth2: {
-      clientId: process.env.SF_CLIENT_ID,
-      clientSecret: process.env.SF_CLIENT_SECRET,
-      loginUrl: process.env.SF_LOGIN_URL || 'https://login.salesforce.com',
+      clientId,
+      clientSecret,
+      loginUrl,
     },
     version: API_VERSION,
   });
 
+  // Mode 1: Refresh token (highest priority)
   if (refreshToken) {
     conn.refreshToken = refreshToken;
     await conn.oauth2.refreshToken(refreshToken);
+    return conn;
   }
 
-  return conn;
+  // Mode 2: Username + password login
+  const sfUsername = process.env.SF_USERNAME;
+  const sfPassword = process.env.SF_PASSWORD;
+  const sfToken = process.env.SF_SECURITY_TOKEN || '';
+
+  if (sfUsername && sfPassword) {
+    await conn.login(sfUsername, sfPassword + sfToken);
+    return conn;
+  }
+
+  // Mode 3: Client credentials flow (OAuth 2.0 client_credentials grant)
+  if (clientId && clientSecret) {
+    const tokenUrl = `${loginUrl}/services/oauth2/token`;
+    const params = new URLSearchParams({
+      grant_type: 'client_credentials',
+      client_id: clientId,
+      client_secret: clientSecret,
+    });
+
+    const response = await fetch(tokenUrl, {
+      method: 'POST',
+      body: params,
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    });
+
+    if (!response.ok) {
+      const errorBody = await response.text();
+      throw new Error(`Client credentials auth failed: ${response.status} — ${errorBody}`);
+    }
+
+    const tokenData = await response.json();
+    return new jsforce.Connection({
+      instanceUrl: tokenData.instance_url,
+      accessToken: tokenData.access_token,
+      version: API_VERSION,
+    });
+  }
+
+  throw new Error('No Salesforce authentication method configured. Set SF_USERNAME+SF_PASSWORD or configure Connected App client credentials.');
 }
 
 /**
