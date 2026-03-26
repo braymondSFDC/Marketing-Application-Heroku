@@ -200,21 +200,16 @@ const PORT = process.env.PORT || 3001;
 const io = initializeWebSocket(server);
 app.set('io', io);
 
-// Run migrations, then start listening
-runMigrations()
-  .then(() => {
-    server.listen(PORT, () => {
-      console.log(`🚀 Marketing Journey Builder running on port ${PORT}`);
-      console.log(`   Environment: ${process.env.NODE_ENV || 'development'}`);
-      console.log(`   Mode: Standalone`);
-    });
-  })
-  .catch((err) => {
-    console.error('[DB] Migration failed — starting server anyway:', err.message);
-    // Start server even if migrations fail, so health check works
-    server.listen(PORT, () => {
-      console.log(`🚀 Marketing Journey Builder running on port ${PORT} (DB migrations failed)`);
-    });
-  });
+// Start server immediately (Heroku requires binding to PORT quickly)
+server.listen(PORT, () => {
+  console.log(`🚀 Marketing Journey Builder running on port ${PORT}`);
+  console.log(`   Environment: ${process.env.NODE_ENV || 'development'}`);
+  console.log(`   Mode: Standalone`);
+
+  // Run migrations in the background after server is listening
+  runMigrations()
+    .then(() => console.log('[DB] Migrations complete — app fully ready.'))
+    .catch((err) => console.error('[DB] Migration failed:', err.message));
+});
 
 module.exports = { app, server };
