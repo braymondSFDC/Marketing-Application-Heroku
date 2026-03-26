@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ReactFlow,
   ReactFlowProvider,
@@ -28,6 +28,55 @@ import BuildPanel from '../Sidebar/BuildPanel';
 import NodeConfig from '../Sidebar/NodeConfig';
 import LiveStats from '../Sidebar/LiveStats';
 import JourneyHeader from '../TopBar/JourneyHeader';
+
+/* ── Undo / Redo hook ── */
+function useUndoRedo(nodes, edges, setNodes, setEdges) {
+  const past = useRef([]);
+  const future = useRef([]);
+  const skipRecord = useRef(false);
+
+  // Record snapshot whenever nodes/edges change (debounced)
+  const recordTimer = useRef(null);
+  useEffect(() => {
+    if (skipRecord.current) { skipRecord.current = false; return; }
+    clearTimeout(recordTimer.current);
+    recordTimer.current = setTimeout(() => {
+      const snap = JSON.stringify({ nodes, edges });
+      const lastSnap = past.current[past.current.length - 1];
+      if (snap !== lastSnap) {
+        past.current.push(snap);
+        if (past.current.length > 50) past.current.shift();
+        future.current = [];
+      }
+    }, 300);
+  }, [nodes, edges]);
+
+  const undo = useCallback(() => {
+    if (past.current.length < 2) return; // need at least 2: prev + current
+    const current = past.current.pop();
+    future.current.push(current);
+    const prev = past.current[past.current.length - 1];
+    const { nodes: pn, edges: pe } = JSON.parse(prev);
+    skipRecord.current = true;
+    setNodes(pn);
+    setEdges(pe);
+  }, [setNodes, setEdges]);
+
+  const redo = useCallback(() => {
+    if (future.current.length === 0) return;
+    const next = future.current.pop();
+    past.current.push(next);
+    const { nodes: nn, edges: ne } = JSON.parse(next);
+    skipRecord.current = true;
+    setNodes(nn);
+    setEdges(ne);
+  }, [setNodes, setEdges]);
+
+  const canUndo = past.current.length >= 2;
+  const canRedo = future.current.length > 0;
+
+  return { undo, redo, canUndo, canRedo };
+}
 
 const nodeTypes = {
   trigger: TriggerNode,
@@ -82,15 +131,37 @@ function CanvasInner({ journeyId, onBack }) {
   const setStoreEdges = useJourneyStore((s) => s.setEdges);
   const selectedNode = useJourneyStore((s) => s.selectedNode);
   const selectNode = useJourneyStore((s) => s.selectNode);
+  const saveCanvas = useJourneyStore((s) => s.saveCanvas);
 
   // React Flow's own state — the rendering source of truth.
-  // Initialized from the store on mount. RF manages internal properties
-  // (measured, width, height, etc.) that must not be stripped.
   const [nodes, setNodes, onNodesChange] = useNodesState(storeNodesToRF(storeNodes));
   const [edges, setEdges, onEdgesChange] = useEdgesState(storeEdgesToRF(storeEdges));
 
+  // Undo / Redo
+  const { undo, redo, canUndo, canRedo } = useUndoRedo(nodes, edges, setNodes, setEdges);
+
+  // Track dirty state for save indicator
+  const [isDirty, setIsDirty] = useState(false);
+  const initialSnap = useRef(JSON.stringify({ nodes: storeNodesToRF(storeNodes), edges: storeEdgesToRF(storeEdges) }));
+  useEffect(() => {
+    const snap = JSON.stringify({ n: nodes.map(n => n.id + n.type + n.position.x + n.position.y), e: edges.map(e => e.id) });
+    const init = JSON.stringify({ n: JSON.parse(initialSnap.current).nodes.map(n => n.id + n.type + n.position.x + n.position.y), e: JSON.parse(initialSnap.current).edges.map(e => e.id) });
+    setIsDirty(snap !== init);
+  }, [nodes, edges]);
+
+  // Keyboard shortcuts: Ctrl+Z = undo, Ctrl+Shift+Z / Ctrl+Y = redo, Ctrl+S = save
+  useEffect(() => {
+    const handler = (e) => {
+      const mod = e.metaKey || e.ctrlKey;
+      if (mod && e.key === 'z' && !e.shiftKey) { e.preventDefault(); undo(); }
+      if (mod && (e.key === 'y' || (e.key === 'z' && e.shiftKey))) { e.preventDefault(); redo(); }
+      if (mod && e.key === 's') { e.preventDefault(); handleSave(); }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  });
+
   // Sync RF state → Zustand store (for persistence / cross-component reads).
-  // Use a ref to avoid infinite loops — only sync when RF state actually changes.
   const syncTimer = useRef(null);
   useEffect(() => {
     clearTimeout(syncTimer.current);
@@ -125,6 +196,15 @@ function CanvasInner({ journeyId, onBack }) {
     }, 200);
   }, [edges, setStoreEdges]);
 
+  // Save canvas to server
+  const handleSave = useCallback(async () => {
+    // Wait for sync to finish, then save
+    await new Promise((r) => setTimeout(r, 300));
+    await saveCanvas();
+    initialSnap.current = JSON.stringify({ nodes, edges });
+    setIsDirty(false);
+  }, [saveCanvas, nodes, edges]);
+
   const onConnect = useCallback((params) => {
     setEdges((eds) =>
       addEdge(
@@ -132,6 +212,11 @@ function CanvasInner({ journeyId, onBack }) {
         eds
       )
     );
+  }, [setEdges]);
+
+  // Click on an edge to delete it
+  const onEdgeClick = useCallback((_event, edge) => {
+    setEdges((eds) => eds.filter((e) => e.id !== edge.id));
   }, [setEdges]);
 
   const onNodeClick = useCallback((_event, node) => {
@@ -166,13 +251,21 @@ function CanvasInner({ journeyId, onBack }) {
       data: { name: `New ${type}` },
     };
 
-    // Add directly to RF state — the useEffect sync will push it to the store
     setNodes((nds) => [...nds, newNode]);
   }, [screenToFlowPosition, setNodes]);
 
   return (
     <div style={styles.container}>
-      <JourneyHeader journey={journey} onBack={onBack} />
+      <JourneyHeader
+        journey={journey}
+        onBack={onBack}
+        onSave={handleSave}
+        onUndo={undo}
+        onRedo={redo}
+        canUndo={canUndo}
+        canRedo={canRedo}
+        isDirty={isDirty}
+      />
 
       <div style={styles.workspace}>
         <BuildPanel />
@@ -184,6 +277,7 @@ function CanvasInner({ journeyId, onBack }) {
             onNodesChange={onNodesChange}
             onEdgesChange={onEdgesChange}
             onConnect={onConnect}
+            onEdgeClick={onEdgeClick}
             onNodeClick={onNodeClick}
             onPaneClick={onPaneClick}
             onDragOver={onDragOver}

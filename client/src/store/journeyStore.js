@@ -143,6 +143,44 @@ const useJourneyStore = create((set, get) => ({
     }));
   },
 
+  // Rename a journey
+  renameJourney: async (id, newName) => {
+    try {
+      const res = await fetch(`${API_BASE}/journeys/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: newName }),
+      });
+      const data = await res.json();
+      set((state) => ({
+        journeys: state.journeys.map((j) =>
+          j.id === id ? { ...j, name: newName } : j
+        ),
+        currentJourney:
+          state.currentJourney?.id === id
+            ? { ...state.currentJourney, name: newName }
+            : state.currentJourney,
+      }));
+      return data.journey;
+    } catch (err) {
+      console.error('Failed to rename journey:', err);
+    }
+  },
+
+  // Delete a journey
+  deleteJourney: async (id) => {
+    try {
+      await fetch(`${API_BASE}/journeys/${id}`, { method: 'DELETE' });
+      set((state) => ({
+        journeys: state.journeys.filter((j) => j.id !== id),
+        currentJourney:
+          state.currentJourney?.id === id ? null : state.currentJourney,
+      }));
+    } catch (err) {
+      console.error('Failed to delete journey:', err);
+    }
+  },
+
   // Launch journey
   launchJourney: async () => {
     const { currentJourney } = get();
