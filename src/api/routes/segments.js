@@ -34,6 +34,15 @@ router.get('/', async (req, res) => {
       });
     }
 
+    // Log auth config state (without revealing secrets)
+    console.log('[Segments] Auth config:', {
+      hasClientId: !!process.env.SF_CLIENT_ID,
+      hasClientSecret: !!process.env.SF_CLIENT_SECRET,
+      hasUsername: !!process.env.SF_USERNAME,
+      hasPassword: !!process.env.SF_PASSWORD,
+      loginUrl: process.env.SF_LOGIN_URL || '(not set, using default)',
+    });
+
     const conn = await getWorkerConnection();
 
     // Fetch Campaigns (most common segment source for marketing journeys)

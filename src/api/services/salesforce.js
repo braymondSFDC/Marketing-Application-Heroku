@@ -24,9 +24,16 @@ function getSalesforceConnection(accessToken, instanceUrl) {
  *   3. Client credentials flow (SF_CLIENT_ID + SF_CLIENT_SECRET only — requires Connected App)
  */
 async function getWorkerConnection(refreshToken) {
-  const loginUrl = process.env.SF_LOGIN_URL || 'https://login.salesforce.com';
+  // Ensure loginUrl is always a valid absolute URL
+  let loginUrl = (process.env.SF_LOGIN_URL || 'https://login.salesforce.com').trim();
+  if (!loginUrl.startsWith('http')) {
+    loginUrl = 'https://' + loginUrl;
+  }
+
   const clientId = process.env.SF_CLIENT_ID;
   const clientSecret = process.env.SF_CLIENT_SECRET;
+
+  console.log('[SF Auth] loginUrl:', loginUrl, '| hasClientId:', !!clientId, '| hasClientSecret:', !!clientSecret);
 
   const conn = new jsforce.Connection({
     oauth2: {
