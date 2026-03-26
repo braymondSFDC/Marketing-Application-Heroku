@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo } from 'react';
+import React, { useCallback, useEffect, useRef } from 'react';
 import {
   ReactFlow,
   ReactFlowProvider,
@@ -7,8 +7,8 @@ import {
   Background,
   addEdge,
   useReactFlow,
-  applyNodeChanges,
-  applyEdgeChanges,
+  useNodesState,
+  useEdgesState,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 
@@ -42,12 +42,40 @@ const edgeTypes = {
   conditional: ConditionalEdge,
 };
 
+/**
+ * Convert store nodes → React Flow format (for initial load only).
+ */
+function storeNodesToRF(storeNodes) {
+  return storeNodes.map((n) => ({
+    id: n.id,
+    type: n.node_type || n.type || 'trigger',
+    position: {
+      x: n.position_x ?? n.position?.x ?? 0,
+      y: n.position_y ?? n.position?.y ?? 0,
+    },
+    data: n.config || n.data || {},
+  }));
+}
+
+function storeEdgesToRF(storeEdges) {
+  return storeEdges.map((e) => ({
+    id: e.id,
+    source: e.source_node_id || e.source,
+    target: e.target_node_id || e.target,
+    label: e.label,
+    type: e.label ? 'conditional' : 'default',
+    animated: true,
+    style: { stroke: '#94a3b8', strokeWidth: 2 },
+  }));
+}
+
 /* ── Inner component that has access to useReactFlow() ── */
 function CanvasInner({ journeyId, onBack }) {
   const { journey } = useJourney(journeyId);
   useRealtimeStats(journeyId);
   const { screenToFlowPosition } = useReactFlow();
 
+  // Zustand store — used for persistence and cross-component access
   const storeNodes = useJourneyStore((s) => s.nodes);
   const storeEdges = useJourneyStore((s) => s.edges);
   const setStoreNodes = useJourneyStore((s) => s.setNodes);
@@ -55,105 +83,56 @@ function CanvasInner({ journeyId, onBack }) {
   const selectedNode = useJourneyStore((s) => s.selectedNode);
   const selectNode = useJourneyStore((s) => s.selectNode);
 
-  // Derive React Flow nodes from Zustand store (single source of truth)
-  const rfNodes = useMemo(() =>
-    storeNodes.map((n) => ({
-      id: n.id,
-      type: n.node_type || n.type || 'trigger',
-      position: { x: n.position_x ?? n.position?.x ?? 0, y: n.position_y ?? n.position?.y ?? 0 },
-      data: n.config || n.data || {},
-    })),
-    [storeNodes]
-  );
+  // React Flow's own state — the rendering source of truth.
+  // Initialized from the store on mount. RF manages internal properties
+  // (measured, width, height, etc.) that must not be stripped.
+  const [nodes, setNodes, onNodesChange] = useNodesState(storeNodesToRF(storeNodes));
+  const [edges, setEdges, onEdgesChange] = useEdgesState(storeEdgesToRF(storeEdges));
 
-  const rfEdges = useMemo(() =>
-    storeEdges.map((e) => ({
-      id: e.id,
-      source: e.source_node_id || e.source,
-      target: e.target_node_id || e.target,
-      label: e.label,
-      type: e.label ? 'conditional' : 'default',
-      animated: true,
-      style: { stroke: '#94a3b8', strokeWidth: 2 },
-    })),
-    [storeEdges]
-  );
+  // Sync RF state → Zustand store (for persistence / cross-component reads).
+  // Use a ref to avoid infinite loops — only sync when RF state actually changes.
+  const syncTimer = useRef(null);
+  useEffect(() => {
+    clearTimeout(syncTimer.current);
+    syncTimer.current = setTimeout(() => {
+      setStoreNodes(
+        nodes.map((n) => ({
+          id: n.id,
+          node_type: n.type,
+          type: n.type,
+          position_x: n.position.x,
+          position_y: n.position.y,
+          config: n.data,
+          data: n.data,
+        }))
+      );
+    }, 200);
+  }, [nodes, setStoreNodes]);
 
-  // Controlled-mode change handlers — write directly to Zustand
-  const onNodesChange = useCallback((changes) => {
-    setStoreNodes((prev) => {
-      // Convert store nodes to RF format, apply changes, then convert back
-      const rfPrev = prev.map((n) => ({
-        id: n.id,
-        type: n.node_type || n.type || 'trigger',
-        position: { x: n.position_x ?? n.position?.x ?? 0, y: n.position_y ?? n.position?.y ?? 0 },
-        data: n.config || n.data || {},
-      }));
-      const rfNext = applyNodeChanges(changes, rfPrev);
-      return rfNext.map((rf) => {
-        // Preserve any extra store fields from the original node
-        const orig = prev.find((n) => n.id === rf.id) || {};
-        return {
-          ...orig,
-          id: rf.id,
-          node_type: rf.type,
-          type: rf.type,
-          position_x: rf.position.x,
-          position_y: rf.position.y,
-          config: rf.data,
-          data: rf.data,
-        };
-      });
-    });
-  }, [setStoreNodes]);
-
-  const onEdgesChange = useCallback((changes) => {
-    setStoreEdges((prev) => {
-      const rfPrev = prev.map((e) => ({
-        id: e.id,
-        source: e.source_node_id || e.source,
-        target: e.target_node_id || e.target,
-        label: e.label,
-        type: e.label ? 'conditional' : 'default',
-        animated: true,
-        style: { stroke: '#94a3b8', strokeWidth: 2 },
-      }));
-      const rfNext = applyEdgeChanges(changes, rfPrev);
-      return rfNext.map((rf) => {
-        const orig = prev.find((e) => e.id === rf.id) || {};
-        return {
-          ...orig,
-          id: rf.id,
-          source_node_id: rf.source,
-          target_node_id: rf.target,
-          source: rf.source,
-          target: rf.target,
-          label: rf.label,
-        };
-      });
-    });
-  }, [setStoreEdges]);
+  useEffect(() => {
+    clearTimeout(syncTimer.current);
+    syncTimer.current = setTimeout(() => {
+      setStoreEdges(
+        edges.map((e) => ({
+          id: e.id,
+          source_node_id: e.source,
+          target_node_id: e.target,
+          source: e.source,
+          target: e.target,
+          label: e.label,
+        }))
+      );
+    }, 200);
+  }, [edges, setStoreEdges]);
 
   const onConnect = useCallback((params) => {
-    setStoreEdges((prev) => {
-      const rfPrev = prev.map((e) => ({
-        id: e.id,
-        source: e.source_node_id || e.source,
-        target: e.target_node_id || e.target,
-        animated: true,
-        style: { stroke: '#94a3b8', strokeWidth: 2 },
-      }));
-      const rfNext = addEdge({ ...params, animated: true, style: { stroke: '#94a3b8', strokeWidth: 2 } }, rfPrev);
-      return rfNext.map((rf) => ({
-        id: rf.id,
-        source_node_id: rf.source,
-        target_node_id: rf.target,
-        source: rf.source,
-        target: rf.target,
-        label: rf.label,
-      }));
-    });
-  }, [setStoreEdges]);
+    setEdges((eds) =>
+      addEdge(
+        { ...params, animated: true, style: { stroke: '#94a3b8', strokeWidth: 2 } },
+        eds
+      )
+    );
+  }, [setEdges]);
 
   const onNodeClick = useCallback((_event, node) => {
     selectNode(node.id);
@@ -175,7 +154,6 @@ function CanvasInner({ journeyId, onBack }) {
     const type = event.dataTransfer.getData('application/reactflow');
     if (!type) return;
 
-    // Use the useReactFlow hook's screenToFlowPosition (works in v12)
     const position = screenToFlowPosition({
       x: event.clientX,
       y: event.clientY,
@@ -183,31 +161,26 @@ function CanvasInner({ journeyId, onBack }) {
 
     const newNode = {
       id: `${type}-${Date.now()}`,
-      node_type: type,
       type,
-      position_x: position.x,
-      position_y: position.y,
-      config: { name: `New ${type}` },
+      position,
       data: { name: `New ${type}` },
     };
 
-    setStoreNodes((prev) => [...prev, newNode]);
-  }, [screenToFlowPosition, setStoreNodes]);
+    // Add directly to RF state — the useEffect sync will push it to the store
+    setNodes((nds) => [...nds, newNode]);
+  }, [screenToFlowPosition, setNodes]);
 
   return (
     <div style={styles.container}>
-      {/* Top Bar */}
       <JourneyHeader journey={journey} onBack={onBack} />
 
       <div style={styles.workspace}>
-        {/* Left: Build Panel */}
         <BuildPanel />
 
-        {/* Center: React Flow Canvas */}
         <div style={styles.canvas}>
           <ReactFlow
-            nodes={rfNodes}
-            edges={rfEdges}
+            nodes={nodes}
+            edges={edges}
             onNodesChange={onNodesChange}
             onEdgesChange={onEdgesChange}
             onConnect={onConnect}
@@ -217,7 +190,6 @@ function CanvasInner({ journeyId, onBack }) {
             onDrop={onDrop}
             nodeTypes={nodeTypes}
             edgeTypes={edgeTypes}
-            fitView
             deleteKeyCode="Backspace"
             snapToGrid
             snapGrid={[16, 16]}
@@ -241,7 +213,6 @@ function CanvasInner({ journeyId, onBack }) {
           </ReactFlow>
         </div>
 
-        {/* Right: Config Panel or Live Stats */}
         <div style={styles.rightPanel}>
           {selectedNode ? (
             <NodeConfig node={selectedNode} />
@@ -279,6 +250,8 @@ const styles = {
   canvas: {
     flex: 1,
     position: 'relative',
+    width: '100%',
+    height: '100%',
   },
   rightPanel: {
     width: '280px',
