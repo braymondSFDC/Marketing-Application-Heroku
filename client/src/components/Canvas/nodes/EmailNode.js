@@ -11,7 +11,9 @@ export default function EmailNode({ id, data, selected }) {
       borderColor: selected ? '#7c3aed' : '#e5e5e5',
       boxShadow: selected ? '0 0 0 2px rgba(124,58,237,0.2)' : '0 1px 3px rgba(0,0,0,0.08)',
     }}>
-      <Handle type="target" position={Position.Top} style={styles.handle} />
+      {/* Target handles: top + left */}
+      <Handle type="target" position={Position.Top} id="top" style={styles.handle} />
+      <Handle type="target" position={Position.Left} id="left" style={styles.handleTarget} />
       <div style={styles.header}>
         <span style={styles.icon}>✉️</span>
         <span style={{ ...styles.type, color: '#7c3aed' }}>Email</span>
@@ -29,7 +31,9 @@ export default function EmailNode({ id, data, selected }) {
           {nodeStats.bounce && <span style={{ ...styles.stat, color: '#ea001e' }}>⚠ {nodeStats.bounce}</span>}
         </div>
       )}
-      <Handle type="source" position={Position.Bottom} style={styles.handle} />
+      {/* Source handles: bottom + right */}
+      <Handle type="source" position={Position.Bottom} id="bottom" style={styles.handle} />
+      <Handle type="source" position={Position.Right} id="right" style={styles.handle} />
     </div>
   );
 }
@@ -83,6 +87,12 @@ const styles = {
     fontWeight: '600',
   },
   handle: {
+    background: '#7c3aed',
+    width: '10px',
+    height: '10px',
+    border: '2px solid #fff',
+  },
+  handleTarget: {
     background: '#7c3aed',
     width: '10px',
     height: '10px',

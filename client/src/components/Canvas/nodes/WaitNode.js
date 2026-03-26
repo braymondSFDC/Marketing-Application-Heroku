@@ -11,7 +11,9 @@ export default function WaitNode({ data, selected }) {
       borderColor: selected ? '#f59e0b' : '#e5e5e5',
       boxShadow: selected ? '0 0 0 2px rgba(245,158,11,0.2)' : '0 1px 3px rgba(0,0,0,0.08)',
     }}>
-      <Handle type="target" position={Position.Top} style={styles.handle} />
+      {/* Target handles: top + left */}
+      <Handle type="target" position={Position.Top} id="top" style={styles.handle} />
+      <Handle type="target" position={Position.Left} id="left" style={styles.handleTarget} />
       <div style={styles.header}>
         <span style={styles.icon}>⏱</span>
         <span style={{ ...styles.type, color: '#d97706' }}>Wait</span>
@@ -21,7 +23,9 @@ export default function WaitNode({ data, selected }) {
         <span style={styles.durationValue}>{duration}</span>
         <span style={styles.durationUnit}>{unit.toLowerCase()}</span>
       </div>
-      <Handle type="source" position={Position.Bottom} style={styles.handle} />
+      {/* Source handles: bottom + right */}
+      <Handle type="source" position={Position.Bottom} id="bottom" style={styles.handle} />
+      <Handle type="source" position={Position.Right} id="right" style={styles.handle} />
     </div>
   );
 }
@@ -70,6 +74,12 @@ const styles = {
     color: '#6b7280',
   },
   handle: {
+    background: '#f59e0b',
+    width: '10px',
+    height: '10px',
+    border: '2px solid #fff',
+  },
+  handleTarget: {
     background: '#f59e0b',
     width: '10px',
     height: '10px',

@@ -16,7 +16,11 @@ export default function TriggerNode({ data, selected }) {
       {data.triggerType && (
         <div style={styles.meta}>{data.triggerType}</div>
       )}
-      <Handle type="source" position={Position.Bottom} style={styles.handle} />
+      {/* Source handles: bottom + right */}
+      <Handle type="source" position={Position.Bottom} id="bottom" style={styles.handle} />
+      <Handle type="source" position={Position.Right} id="right" style={styles.handle} />
+      {/* Target handles: top + left (trigger can also receive from other triggers) */}
+      <Handle type="target" position={Position.Left} id="left" style={styles.handleTarget} />
     </div>
   );
 }
@@ -56,6 +60,12 @@ const styles = {
     marginTop: '2px',
   },
   handle: {
+    background: '#0176d3',
+    width: '10px',
+    height: '10px',
+    border: '2px solid #fff',
+  },
+  handleTarget: {
     background: '#0176d3',
     width: '10px',
     height: '10px',

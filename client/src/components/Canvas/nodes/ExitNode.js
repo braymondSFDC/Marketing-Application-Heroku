@@ -8,7 +8,9 @@ export default function ExitNode({ data, selected }) {
       borderColor: selected ? '#6b7280' : '#e5e5e5',
       boxShadow: selected ? '0 0 0 2px rgba(107,114,128,0.2)' : '0 1px 3px rgba(0,0,0,0.08)',
     }}>
-      <Handle type="target" position={Position.Top} style={styles.handle} />
+      {/* Target handles: top + left */}
+      <Handle type="target" position={Position.Top} id="top" style={styles.handle} />
+      <Handle type="target" position={Position.Left} id="left" style={styles.handleTarget} />
       <div style={styles.header}>
         <span style={styles.icon}>🔚</span>
         <span style={{ ...styles.type, color: '#6b7280' }}>Exit</span>
@@ -47,6 +49,12 @@ const styles = {
     color: '#6b7280',
   },
   handle: {
+    background: '#6b7280',
+    width: '10px',
+    height: '10px',
+    border: '2px solid #fff',
+  },
+  handleTarget: {
     background: '#6b7280',
     width: '10px',
     height: '10px',

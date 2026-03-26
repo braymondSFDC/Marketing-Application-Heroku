@@ -13,7 +13,9 @@ export default function SplitNode({ data, selected }) {
       borderColor: selected ? '#06b6d4' : '#e5e5e5',
       boxShadow: selected ? '0 0 0 2px rgba(6,182,212,0.2)' : '0 1px 3px rgba(0,0,0,0.08)',
     }}>
-      <Handle type="target" position={Position.Top} style={styles.handle} />
+      {/* Target handles: top + left */}
+      <Handle type="target" position={Position.Top} id="top" style={styles.handle} />
+      <Handle type="target" position={Position.Left} id="left" style={styles.handleTarget} />
       <div style={styles.header}>
         <span style={styles.icon}>⑂</span>
         <span style={{ ...styles.type, color: '#0891b2' }}>A/B Split</span>
@@ -26,9 +28,11 @@ export default function SplitNode({ data, selected }) {
           </div>
         ))}
       </div>
-      {/* Multiple source handles for split paths */}
+      {/* Source handles: bottom (a/b) + right (a/b) */}
       <Handle type="source" position={Position.Bottom} id="a" style={{ ...styles.handle, left: '30%' }} />
       <Handle type="source" position={Position.Bottom} id="b" style={{ ...styles.handle, left: '70%' }} />
+      <Handle type="source" position={Position.Right} id="right-a" style={{ ...styles.handle, top: '35%' }} />
+      <Handle type="source" position={Position.Right} id="right-b" style={{ ...styles.handle, top: '65%' }} />
     </div>
   );
 }
@@ -75,6 +79,12 @@ const styles = {
     borderRadius: '10px',
   },
   handle: {
+    background: '#06b6d4',
+    width: '10px',
+    height: '10px',
+    border: '2px solid #fff',
+  },
+  handleTarget: {
     background: '#06b6d4',
     width: '10px',
     height: '10px',

@@ -8,7 +8,9 @@ export default function ConditionNode({ data, selected }) {
       borderColor: selected ? '#f97316' : '#e5e5e5',
       boxShadow: selected ? '0 0 0 2px rgba(249,115,22,0.2)' : '0 1px 3px rgba(0,0,0,0.08)',
     }}>
-      <Handle type="target" position={Position.Top} style={styles.handle} />
+      {/* Target handles: top + left */}
+      <Handle type="target" position={Position.Top} id="top" style={styles.handle} />
+      <Handle type="target" position={Position.Left} id="left" style={styles.handleTarget} />
       <div style={styles.header}>
         <span style={styles.icon}>◆</span>
         <span style={{ ...styles.type, color: '#ea580c' }}>Condition</span>
@@ -23,8 +25,11 @@ export default function ConditionNode({ data, selected }) {
         <span style={{ ...styles.branchLabel, color: '#2e844a' }}>✓ Yes</span>
         <span style={{ ...styles.branchLabel, color: '#ea001e' }}>✗ No</span>
       </div>
+      {/* Source handles: bottom (yes/no) + right (yes/no) */}
       <Handle type="source" position={Position.Bottom} id="yes" style={{ ...styles.handle, left: '30%' }} />
       <Handle type="source" position={Position.Bottom} id="no" style={{ ...styles.handle, left: '70%' }} />
+      <Handle type="source" position={Position.Right} id="right-yes" style={{ ...styles.handle, top: '35%' }} />
+      <Handle type="source" position={Position.Right} id="right-no" style={{ ...styles.handle, top: '65%' }} />
     </div>
   );
 }
@@ -78,6 +83,12 @@ const styles = {
     fontWeight: '600',
   },
   handle: {
+    background: '#f97316',
+    width: '10px',
+    height: '10px',
+    border: '2px solid #fff',
+  },
+  handleTarget: {
     background: '#f97316',
     width: '10px',
     height: '10px',
