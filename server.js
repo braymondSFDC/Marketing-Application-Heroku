@@ -108,8 +108,31 @@ app.use('/api/segments', segmentRoutes);
 app.use('/api/webhooks', webhookRoutes);
 
 // Health check
-app.get('/api/health', (_req, res) => {
-  res.json({ status: 'ok', timestamp: new Date().toISOString() });
+app.get('/api/health', async (_req, res) => {
+  let dbStatus = 'unknown';
+  try {
+    const result = await db.query('SELECT 1 as ok');
+    dbStatus = result.rows[0]?.ok === 1 ? 'connected' : 'error';
+  } catch (err) {
+    dbStatus = `error: ${err.message}`;
+  }
+  res.json({ status: 'ok', timestamp: new Date().toISOString(), db: dbStatus });
+});
+
+// DB debug endpoint — check tables and migration status
+app.get('/api/health/db', async (_req, res) => {
+  try {
+    const tables = await db.query(
+      `SELECT table_name FROM information_schema.tables WHERE table_schema = 'public' ORDER BY table_name`
+    );
+    const migrations = await db.query('SELECT * FROM _migrations ORDER BY id').catch(() => ({ rows: [] }));
+    res.json({
+      tables: tables.rows.map(r => r.table_name),
+      migrations: migrations.rows,
+    });
+  } catch (err) {
+    res.json({ error: err.message });
+  }
 });
 
 // ---------------------------------------------------------------------------
