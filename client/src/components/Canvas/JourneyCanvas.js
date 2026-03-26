@@ -1,12 +1,14 @@
-import React, { useCallback, useRef, useMemo } from 'react';
+import React, { useCallback, useMemo } from 'react';
 import {
   ReactFlow,
+  ReactFlowProvider,
   Controls,
   MiniMap,
   Background,
   addEdge,
-  useNodesState,
-  useEdgesState,
+  useReactFlow,
+  applyNodeChanges,
+  applyEdgeChanges,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 
@@ -40,10 +42,11 @@ const edgeTypes = {
   conditional: ConditionalEdge,
 };
 
-export default function JourneyCanvas({ journeyId, onBack }) {
-  const reactFlowRef = useRef(null);
+/* ── Inner component that has access to useReactFlow() ── */
+function CanvasInner({ journeyId, onBack }) {
   const { journey } = useJourney(journeyId);
   useRealtimeStats(journeyId);
+  const { screenToFlowPosition } = useReactFlow();
 
   const storeNodes = useJourneyStore((s) => s.nodes);
   const storeEdges = useJourneyStore((s) => s.edges);
@@ -52,8 +55,8 @@ export default function JourneyCanvas({ journeyId, onBack }) {
   const selectedNode = useJourneyStore((s) => s.selectedNode);
   const selectNode = useJourneyStore((s) => s.selectNode);
 
-  // Convert stored nodes to React Flow format
-  const initialNodes = useMemo(() =>
+  // Derive React Flow nodes from Zustand store (single source of truth)
+  const rfNodes = useMemo(() =>
     storeNodes.map((n) => ({
       id: n.id,
       type: n.node_type || n.type || 'trigger',
@@ -63,7 +66,7 @@ export default function JourneyCanvas({ journeyId, onBack }) {
     [storeNodes]
   );
 
-  const initialEdges = useMemo(() =>
+  const rfEdges = useMemo(() =>
     storeEdges.map((e) => ({
       id: e.id,
       source: e.source_node_id || e.source,
@@ -76,39 +79,81 @@ export default function JourneyCanvas({ journeyId, onBack }) {
     [storeEdges]
   );
 
-  const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
-  const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
-
-  // Sync local state back to store
-  const handleNodesChange = useCallback((changes) => {
-    onNodesChange(changes);
+  // Controlled-mode change handlers — write directly to Zustand
+  const onNodesChange = useCallback((changes) => {
     setStoreNodes((prev) => {
-      const updated = [...prev];
-      for (const change of changes) {
-        if (change.type === 'position' && change.position) {
-          const idx = updated.findIndex((n) => n.id === change.id);
-          if (idx >= 0) {
-            updated[idx] = { ...updated[idx], position_x: change.position.x, position_y: change.position.y };
-          }
-        }
-      }
-      return updated;
+      // Convert store nodes to RF format, apply changes, then convert back
+      const rfPrev = prev.map((n) => ({
+        id: n.id,
+        type: n.node_type || n.type || 'trigger',
+        position: { x: n.position_x ?? n.position?.x ?? 0, y: n.position_y ?? n.position?.y ?? 0 },
+        data: n.config || n.data || {},
+      }));
+      const rfNext = applyNodeChanges(changes, rfPrev);
+      return rfNext.map((rf) => {
+        // Preserve any extra store fields from the original node
+        const orig = prev.find((n) => n.id === rf.id) || {};
+        return {
+          ...orig,
+          id: rf.id,
+          node_type: rf.type,
+          type: rf.type,
+          position_x: rf.position.x,
+          position_y: rf.position.y,
+          config: rf.data,
+          data: rf.data,
+        };
+      });
     });
-  }, [onNodesChange, setStoreNodes]);
+  }, [setStoreNodes]);
+
+  const onEdgesChange = useCallback((changes) => {
+    setStoreEdges((prev) => {
+      const rfPrev = prev.map((e) => ({
+        id: e.id,
+        source: e.source_node_id || e.source,
+        target: e.target_node_id || e.target,
+        label: e.label,
+        type: e.label ? 'conditional' : 'default',
+        animated: true,
+        style: { stroke: '#94a3b8', strokeWidth: 2 },
+      }));
+      const rfNext = applyEdgeChanges(changes, rfPrev);
+      return rfNext.map((rf) => {
+        const orig = prev.find((e) => e.id === rf.id) || {};
+        return {
+          ...orig,
+          id: rf.id,
+          source_node_id: rf.source,
+          target_node_id: rf.target,
+          source: rf.source,
+          target: rf.target,
+          label: rf.label,
+        };
+      });
+    });
+  }, [setStoreEdges]);
 
   const onConnect = useCallback((params) => {
-    setEdges((eds) => addEdge({ ...params, animated: true, style: { stroke: '#94a3b8', strokeWidth: 2 } }, eds));
-    setStoreEdges((prev) => [
-      ...prev,
-      {
-        id: `e-${params.source}-${params.target}`,
-        source_node_id: params.source,
-        target_node_id: params.target,
-        source: params.source,
-        target: params.target,
-      },
-    ]);
-  }, [setEdges, setStoreEdges]);
+    setStoreEdges((prev) => {
+      const rfPrev = prev.map((e) => ({
+        id: e.id,
+        source: e.source_node_id || e.source,
+        target: e.target_node_id || e.target,
+        animated: true,
+        style: { stroke: '#94a3b8', strokeWidth: 2 },
+      }));
+      const rfNext = addEdge({ ...params, animated: true, style: { stroke: '#94a3b8', strokeWidth: 2 } }, rfPrev);
+      return rfNext.map((rf) => ({
+        id: rf.id,
+        source_node_id: rf.source,
+        target_node_id: rf.target,
+        source: rf.source,
+        target: rf.target,
+        label: rf.label,
+      }));
+    });
+  }, [setStoreEdges]);
 
   const onNodeClick = useCallback((_event, node) => {
     selectNode(node.id);
@@ -130,30 +175,24 @@ export default function JourneyCanvas({ journeyId, onBack }) {
     const type = event.dataTransfer.getData('application/reactflow');
     if (!type) return;
 
-    const position = reactFlowRef.current?.screenToFlowPosition({
+    // Use the useReactFlow hook's screenToFlowPosition (works in v12)
+    const position = screenToFlowPosition({
       x: event.clientX,
       y: event.clientY,
-    }) || { x: event.clientX, y: event.clientY };
+    });
 
     const newNode = {
       id: `${type}-${Date.now()}`,
+      node_type: type,
       type,
-      position,
+      position_x: position.x,
+      position_y: position.y,
+      config: { name: `New ${type}` },
       data: { name: `New ${type}` },
     };
 
-    setNodes((nds) => [...nds, newNode]);
-    setStoreNodes((prev) => [
-      ...prev,
-      {
-        id: newNode.id,
-        node_type: type,
-        position_x: position.x,
-        position_y: position.y,
-        config: newNode.data,
-      },
-    ]);
-  }, [setNodes, setStoreNodes]);
+    setStoreNodes((prev) => [...prev, newNode]);
+  }, [screenToFlowPosition, setStoreNodes]);
 
   return (
     <div style={styles.container}>
@@ -167,10 +206,9 @@ export default function JourneyCanvas({ journeyId, onBack }) {
         {/* Center: React Flow Canvas */}
         <div style={styles.canvas}>
           <ReactFlow
-            ref={reactFlowRef}
-            nodes={nodes}
-            edges={edges}
-            onNodesChange={handleNodesChange}
+            nodes={rfNodes}
+            edges={rfEdges}
+            onNodesChange={onNodesChange}
             onEdgesChange={onEdgesChange}
             onConnect={onConnect}
             onNodeClick={onNodeClick}
@@ -213,6 +251,15 @@ export default function JourneyCanvas({ journeyId, onBack }) {
         </div>
       </div>
     </div>
+  );
+}
+
+/* ── Exported wrapper provides ReactFlowProvider ── */
+export default function JourneyCanvas({ journeyId, onBack }) {
+  return (
+    <ReactFlowProvider>
+      <CanvasInner journeyId={journeyId} onBack={onBack} />
+    </ReactFlowProvider>
   );
 }
 
