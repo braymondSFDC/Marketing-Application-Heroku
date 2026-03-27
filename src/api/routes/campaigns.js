@@ -75,21 +75,19 @@ router.get('/metadata', async (req, res) => {
     const conn = connInfo.conn || await connInfo.connPromise;
     const fields = await describeObject(conn, 'Campaign');
 
-    // Extract relevant picklist fields
+    // Extract ALL picklist fields — include standard ones (Type, Status)
+    // and ALL custom picklist fields (catches any Business Unit variant)
     const picklistFields = {};
-    const interestingFields = ['Type', 'Status', 'BusinessUnit__c', 'Business_Unit__c', 'BU__c'];
 
     for (const f of fields) {
-      // Include standard picklist fields and any field with "business" or "unit" in the name
-      const isInteresting = interestingFields.includes(f.name) ||
-        (f.name.toLowerCase().includes('business') && f.type === 'picklist') ||
-        (f.name.toLowerCase().includes('unit') && f.type === 'picklist') ||
-        f.name === 'Type' || f.name === 'Status';
+      const isStandardPicklist = (f.name === 'Type' || f.name === 'Status') && f.type === 'picklist';
+      const isCustomPicklist = f.custom && f.type === 'picklist';
 
-      if (isInteresting && f.picklistValues && f.picklistValues.length > 0) {
+      if ((isStandardPicklist || isCustomPicklist) && f.picklistValues && f.picklistValues.length > 0) {
         picklistFields[f.name] = {
           label: f.label,
           name: f.name,
+          custom: f.custom || false,
           values: f.picklistValues
             .filter(pv => pv.active !== false)
             .map(pv => ({ label: pv.label, value: pv.value })),
@@ -97,6 +95,7 @@ router.get('/metadata', async (req, res) => {
       }
     }
 
+    console.log('[Campaigns] Metadata fields found:', Object.keys(picklistFields).join(', '));
     res.json({ connected: true, fields: picklistFields });
   } catch (err) {
     console.error('[Campaigns] Error fetching metadata:', err.message);
@@ -109,7 +108,7 @@ router.get('/metadata', async (req, res) => {
  */
 router.post('/', async (req, res) => {
   try {
-    const { name, type, status, businessUnit } = req.body;
+    const { name, type, status, customFields } = req.body;
 
     if (!name) {
       return res.status(400).json({ error: 'Campaign name is required' });
@@ -130,18 +129,12 @@ router.post('/', async (req, res) => {
       IsActive: true,
     };
 
-    // Add business unit field if provided (detect the actual field name)
-    if (businessUnit) {
-      // Try common field names for Business Unit
-      const fields = await describeObject(conn, 'Campaign');
-      const buField = fields.find(f =>
-        f.name === 'BusinessUnit__c' ||
-        f.name === 'Business_Unit__c' ||
-        f.name === 'BU__c' ||
-        (f.label.toLowerCase().includes('business unit') && f.type === 'picklist')
-      );
-      if (buField) {
-        campaignData[buField.name] = businessUnit;
+    // Add any custom picklist field values (Business Unit, Region, etc.)
+    if (customFields && typeof customFields === 'object') {
+      for (const [fieldName, value] of Object.entries(customFields)) {
+        if (value && fieldName.endsWith('__c')) {
+          campaignData[fieldName] = value;
+        }
       }
     }
 
@@ -157,7 +150,6 @@ router.post('/', async (req, res) => {
         name,
         type: type || null,
         status: status || 'Planned',
-        businessUnit: businessUnit || null,
       },
     });
   } catch (err) {

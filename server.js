@@ -36,6 +36,10 @@ const server = http.createServer(app);
 app.use(morgan('combined'));
 app.use(compression());
 
+// Trust proxy — required for Heroku (SSL terminates at LB, Express sees HTTP)
+// Without this, secure cookies won't be set in production.
+app.set('trust proxy', 1);
+
 // Helmet — standalone mode with Salesforce OAuth support
 app.use(
   helmet({

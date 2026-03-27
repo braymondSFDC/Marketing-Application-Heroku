@@ -41,7 +41,9 @@ router.get('/', async (req, res) => {
 
     // ── Fetch Data Cloud Segments (Segment objects) ──
     let dataCloudSegments = [];
+    let dcError = null;
     try {
+      // Try the standard Segment object query first (Data Cloud)
       dataCloudSegments = await queryRecords(
         conn,
         `SELECT Id, Name, SegmentStatus, Description, SegmentType, LastCalculatedDate
@@ -50,9 +52,33 @@ router.get('/', async (req, res) => {
          ORDER BY LastModifiedDate DESC
          LIMIT 50`
       );
+      console.log('[Segments] Found', dataCloudSegments.length, 'Data Cloud segments');
     } catch (dcErr) {
-      // Data Cloud may not be enabled — that's ok
-      console.log('[Segments] Data Cloud segments not available:', dcErr.message);
+      console.log('[Segments] Segment object query failed:', dcErr.message);
+      dcError = dcErr.message;
+
+      // Fallback: try querying via the Data Cloud API endpoint
+      try {
+        const dcResult = await conn.request(
+          `/services/data/v62.0/ssot/segments`
+        );
+        const dcSegments = dcResult.segments || dcResult.data || [];
+        dataCloudSegments = dcSegments
+          .filter((s) => s.status === 'Published' || s.segmentStatus === 'Published' || s.publishStatus === 'Published')
+          .map((s) => ({
+            Id: s.id || s.segmentId,
+            Name: s.name || s.segmentName,
+            SegmentStatus: s.status || s.segmentStatus || 'Published',
+            Description: s.description || null,
+            SegmentType: s.segmentType || s.type || null,
+            LastCalculatedDate: s.lastCalculatedDate || null,
+          }));
+        dcError = null;
+        console.log('[Segments] Found', dataCloudSegments.length, 'segments via Data Cloud API');
+      } catch (dcApiErr) {
+        console.log('[Segments] Data Cloud API also not available:', dcApiErr.message);
+        dcError = `${dcErr.message}; API fallback: ${dcApiErr.message}`;
+      }
     }
 
     // ── Fetch Campaigns ──
@@ -184,6 +210,7 @@ router.get('/', async (req, res) => {
       totalCampaigns: campaigns.length,
       totalListViews: contactListViews.length + leadListViews.length,
       totalReports: reports.length,
+      dataCloudError: dcError || null,
     });
   } catch (err) {
     console.error('[Segments] Error fetching segments:', err.message);

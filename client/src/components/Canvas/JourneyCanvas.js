@@ -140,6 +140,13 @@ function CanvasInner({ journeyId, onBack }) {
   const [nodes, setNodes, onNodesChange] = useNodesState(storeNodesToRF(storeNodes));
   const [edges, setEdges, onEdgesChange] = useEdgesState(storeEdgesToRF(storeEdges));
 
+  // Register RF setNodes with the store so updateNodeConfig can push data changes to the canvas
+  const registerRFSetNodes = useJourneyStore((s) => s.registerRFSetNodes);
+  useEffect(() => {
+    registerRFSetNodes(setNodes);
+    return () => registerRFSetNodes(null);
+  }, [setNodes, registerRFSetNodes]);
+
   // Undo / Redo
   const { undo, redo, canUndo, canRedo } = useUndoRedo(nodes, edges, setNodes, setEdges);
 
@@ -226,7 +233,8 @@ function CanvasInner({ journeyId, onBack }) {
   }, [setEdges]);
 
   const onNodeClick = useCallback((_event, node) => {
-    selectNode(node.id);
+    // Pass the full RF node directly so selectedNode always has fresh data
+    selectNode(node.id, node);
   }, [selectNode]);
 
   const onPaneClick = useCallback(() => {

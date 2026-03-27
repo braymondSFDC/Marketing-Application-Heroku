@@ -15,7 +15,7 @@ export default function CampaignPicker({ journey }) {
   const [showCreate, setShowCreate] = useState(false);
   const [newCampaignName, setNewCampaignName] = useState('');
   const [newCampaignType, setNewCampaignType] = useState('');
-  const [newCampaignBU, setNewCampaignBU] = useState('');
+  const [customFieldValues, setCustomFieldValues] = useState({});
   const [creating, setCreating] = useState(false);
   const [metadata, setMetadata] = useState(null);
   const dropdownRef = useRef(null);
@@ -111,13 +111,19 @@ export default function CampaignPicker({ journey }) {
     if (!newCampaignName.trim()) return;
     setCreating(true);
     try {
+      // Build custom field map — filter out empty values
+      const customFields = {};
+      for (const [fieldName, value] of Object.entries(customFieldValues)) {
+        if (value) customFields[fieldName] = value;
+      }
+
       const res = await fetch('/api/campaigns', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           name: newCampaignName.trim(),
           type: newCampaignType || undefined,
-          businessUnit: newCampaignBU || undefined,
+          customFields: Object.keys(customFields).length > 0 ? customFields : undefined,
         }),
       });
       const data = await res.json();
@@ -131,21 +137,16 @@ export default function CampaignPicker({ journey }) {
     setCreating(false);
     setNewCampaignName('');
     setNewCampaignType('');
-    setNewCampaignBU('');
+    setCustomFieldValues({});
     setShowCreate(false);
   };
 
-  // Find the Business Unit field from metadata
-  const buField = metadata
-    ? Object.values(metadata).find(f =>
-        f.label.toLowerCase().includes('business unit') ||
-        f.name.toLowerCase().includes('businessunit') ||
-        f.name.toLowerCase().includes('business_unit') ||
-        f.name === 'BU__c'
-      )
-    : null;
-
   const typeField = metadata?.Type || null;
+
+  // Collect ALL custom picklist fields from metadata (catches Business Unit, Region, etc.)
+  const customPicklistFields = metadata
+    ? Object.values(metadata).filter(f => f.custom)
+    : [];
 
   // Get current campaign name
   const currentCampaignName = (() => {
@@ -219,19 +220,20 @@ export default function CampaignPicker({ journey }) {
                     </select>
                   )}
 
-                  {/* Business Unit dropdown */}
-                  {buField && buField.values.length > 0 && (
+                  {/* Dynamic custom picklist fields (Business Unit, Region, etc.) */}
+                  {customPicklistFields.map((field) => (
                     <select
+                      key={field.name}
                       style={styles.createSelect}
-                      value={newCampaignBU}
-                      onChange={(e) => setNewCampaignBU(e.target.value)}
+                      value={customFieldValues[field.name] || ''}
+                      onChange={(e) => setCustomFieldValues(prev => ({ ...prev, [field.name]: e.target.value }))}
                     >
-                      <option value="">— {buField.label} (optional) —</option>
-                      {buField.values.map((v) => (
+                      <option value="">— {field.label} (optional) —</option>
+                      {field.values.map((v) => (
                         <option key={v.value} value={v.value}>{v.label}</option>
                       ))}
                     </select>
-                  )}
+                  ))}
 
                   <div style={styles.createActions}>
                     <button

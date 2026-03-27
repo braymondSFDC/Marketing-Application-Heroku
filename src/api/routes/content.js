@@ -38,11 +38,46 @@ router.get('/', async (req, res) => {
     }
 
     const contentType = req.query.type || 'all';
+    const workspaceFilter = req.query.workspace || null;
     const content = [];
+
+    // ── Resolve workspace ID if a workspace filter name is provided ──
+    let workspaceId = null;
+    if (workspaceFilter) {
+      try {
+        const workspaces = await queryRecords(
+          conn,
+          `SELECT Id, Name FROM ContentWorkspace WHERE Name LIKE '%${workspaceFilter.replace(/'/g, "\\'")}%' LIMIT 5`
+        );
+        if (workspaces.length > 0) {
+          workspaceId = workspaces[0].Id;
+          console.log(`[Content] Using workspace: ${workspaces[0].Name} (${workspaceId})`);
+        }
+      } catch (wsErr) {
+        console.log('[Content] Could not resolve workspace:', wsErr.message);
+      }
+    }
+
+    // If no explicit workspace filter, try the default Marketing Cloud workspace
+    if (!workspaceId) {
+      try {
+        const defaultWs = await queryRecords(
+          conn,
+          `SELECT Id, Name FROM ContentWorkspace WHERE Name LIKE '%Marketing Cloud%' ORDER BY CreatedDate ASC LIMIT 1`
+        );
+        if (defaultWs.length > 0) {
+          workspaceId = defaultWs[0].Id;
+          console.log(`[Content] Defaulting to workspace: ${defaultWs[0].Name} (${workspaceId})`);
+        }
+      } catch (wsErr) {
+        console.log('[Content] Could not find Marketing Cloud workspace:', wsErr.message);
+      }
+    }
 
     // ── Fetch Email Templates ──
     if (contentType === 'all' || contentType === 'email') {
       try {
+        // If workspace is found, filter EmailTemplates by folder
         const emailTemplates = await queryRecords(
           conn,
           `SELECT Id, Name, Subject, DeveloperName, FolderId, TemplateType, IsActive, Body, HtmlValue, Description
@@ -68,17 +103,28 @@ router.get('/', async (req, res) => {
         console.log('[Content] Could not fetch email templates:', etErr.message);
       }
 
-      // ── Fetch CMS Email content (ManagedContent/ContentVersion) ──
+      // ── Fetch CMS Email content — filtered by workspace when available ──
       try {
-        const cmsContent = await queryRecords(
-          conn,
-          `SELECT Id, Title, VersionNumber, FileType, ContentDocumentId, Description, IsLatest
+        let cmsQuery;
+        if (workspaceId) {
+          // Filter ContentVersion to only items in the target workspace
+          cmsQuery = `SELECT Id, Title, VersionNumber, FileType, ContentDocumentId, Description, IsLatest
+           FROM ContentVersion
+           WHERE FileType IN ('SNOTE', 'HTML')
+             AND IsLatest = true
+             AND ContentDocumentId IN (SELECT ContentDocumentId FROM ContentWorkspaceDoc WHERE ContentWorkspaceId = '${workspaceId}')
+           ORDER BY LastModifiedDate DESC
+           LIMIT 30`;
+        } else {
+          cmsQuery = `SELECT Id, Title, VersionNumber, FileType, ContentDocumentId, Description, IsLatest
            FROM ContentVersion
            WHERE FileType IN ('SNOTE', 'HTML')
              AND IsLatest = true
            ORDER BY LastModifiedDate DESC
-           LIMIT 30`
-        );
+           LIMIT 30`;
+        }
+
+        const cmsContent = await queryRecords(conn, cmsQuery);
         for (const c of cmsContent) {
           content.push({
             id: c.Id,
@@ -152,6 +198,7 @@ router.get('/', async (req, res) => {
       content,
       totalEmails: content.filter(c => c.type === 'email').length,
       totalSms: content.filter(c => c.type === 'sms').length,
+      workspaceId: workspaceId || null,
     });
   } catch (err) {
     console.error('[Content] Error fetching content:', err.message);

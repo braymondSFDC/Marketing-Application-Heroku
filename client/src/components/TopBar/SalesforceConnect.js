@@ -17,7 +17,7 @@ export default function SalesforceConnect({ compact = false }) {
 
   const fetchStatus = async () => {
     try {
-      const res = await fetch('/auth/status');
+      const res = await fetch('/auth/status', { credentials: 'include' });
       const data = await res.json();
       setStatus(data);
     } catch (err) {
@@ -32,7 +32,7 @@ export default function SalesforceConnect({ compact = false }) {
 
   const handleDisconnect = async () => {
     try {
-      await fetch('/auth/disconnect', { method: 'POST' });
+      await fetch('/auth/disconnect', { method: 'POST', credentials: 'include' });
       setStatus({ connected: false });
       window.location.reload();
     } catch (err) {

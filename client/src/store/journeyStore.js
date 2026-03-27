@@ -20,7 +20,13 @@ const useJourneyStore = create((set, get) => ({
   // ── Launch progress ──
   launchProgress: null,
 
+  // ── Callback for syncing config changes back to React Flow ──
+  _rfSetNodes: null,
+
   // ── Actions ──
+
+  /** Register React Flow's setNodes so config updates propagate to the canvas */
+  registerRFSetNodes: (fn) => set({ _rfSetNodes: fn }),
 
   setCanvasContext: (ctx) => set({ canvasContext: ctx }),
 
@@ -130,17 +136,41 @@ const useJourneyStore = create((set, get) => ({
     set((state) => ({ nodes: [...state.nodes, node] }));
   },
 
-  selectNode: (nodeId) => {
+  selectNode: (nodeId, rfNode) => {
+    if (!nodeId) {
+      set({ selectedNode: null });
+      return;
+    }
+    // If a React Flow node was passed directly, use it (has freshest data)
+    if (rfNode) {
+      set({ selectedNode: { id: rfNode.id, type: rfNode.type, data: rfNode.data } });
+      return;
+    }
     const node = get().nodes.find((n) => n.id === nodeId) || null;
     set({ selectedNode: node });
   },
 
   updateNodeConfig: (nodeId, config) => {
-    set((state) => ({
-      nodes: state.nodes.map((n) =>
+    // Update Zustand store nodes
+    set((state) => {
+      const updatedNodes = state.nodes.map((n) =>
         n.id === nodeId ? { ...n, data: { ...n.data, ...config } } : n
-      ),
-    }));
+      );
+      const updatedSelected = state.selectedNode?.id === nodeId
+        ? { ...state.selectedNode, data: { ...state.selectedNode.data, ...config } }
+        : state.selectedNode;
+      return { nodes: updatedNodes, selectedNode: updatedSelected };
+    });
+
+    // Also push the change into React Flow's own nodes state so the canvas re-renders
+    const rfSetNodes = get()._rfSetNodes;
+    if (rfSetNodes) {
+      rfSetNodes((prev) =>
+        prev.map((n) =>
+          n.id === nodeId ? { ...n, data: { ...n.data, ...config } } : n
+        )
+      );
+    }
   },
 
   // Rename a journey
