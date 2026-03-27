@@ -4,6 +4,7 @@ import useJourneyStore from '../../store/journeyStore';
 /**
  * CampaignPicker — Lets users associate a journey with an existing
  * Salesforce Campaign or create a new one directly from the canvas.
+ * Includes Business Unit selection for campaign creation.
  */
 export default function CampaignPicker({ journey }) {
   const [campaigns, setCampaigns] = useState([]);
@@ -13,7 +14,10 @@ export default function CampaignPicker({ journey }) {
   const [search, setSearch] = useState('');
   const [showCreate, setShowCreate] = useState(false);
   const [newCampaignName, setNewCampaignName] = useState('');
+  const [newCampaignType, setNewCampaignType] = useState('');
+  const [newCampaignBU, setNewCampaignBU] = useState('');
   const [creating, setCreating] = useState(false);
+  const [metadata, setMetadata] = useState(null);
   const dropdownRef = useRef(null);
 
   // Fetch campaigns when dropdown opens
@@ -22,6 +26,13 @@ export default function CampaignPicker({ journey }) {
       fetchCampaigns();
     }
   }, [isOpen]);
+
+  // Fetch metadata when create form is shown
+  useEffect(() => {
+    if (showCreate && !metadata) {
+      fetchMetadata();
+    }
+  }, [showCreate]);
 
   // Close dropdown on click outside
   useEffect(() => {
@@ -49,6 +60,16 @@ export default function CampaignPicker({ journey }) {
     setLoading(false);
   };
 
+  const fetchMetadata = async () => {
+    try {
+      const res = await fetch('/api/campaigns/metadata');
+      const data = await res.json();
+      setMetadata(data.fields || {});
+    } catch (err) {
+      console.error('Failed to fetch campaign metadata:', err);
+    }
+  };
+
   const handleSelectCampaign = async (campaign) => {
     setIsOpen(false);
     setSearch('');
@@ -58,7 +79,6 @@ export default function CampaignPicker({ journey }) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ sf_campaign_id: campaign.id }),
       });
-      // Update local state
       useJourneyStore.setState((state) => ({
         currentJourney: state.currentJourney
           ? { ...state.currentJourney, sf_campaign_id: campaign.id, _campaignName: campaign.name }
@@ -72,7 +92,6 @@ export default function CampaignPicker({ journey }) {
   const handleUnlinkCampaign = async () => {
     setIsOpen(false);
     try {
-      // Send empty string to clear campaign — the COALESCE will set it
       await fetch(`/api/journeys/${journey.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
@@ -95,13 +114,15 @@ export default function CampaignPicker({ journey }) {
       const res = await fetch('/api/campaigns', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: newCampaignName.trim() }),
+        body: JSON.stringify({
+          name: newCampaignName.trim(),
+          type: newCampaignType || undefined,
+          businessUnit: newCampaignBU || undefined,
+        }),
       });
       const data = await res.json();
       if (data.campaign) {
-        // Auto-link the new campaign to this journey
         await handleSelectCampaign(data.campaign);
-        // Add to local list
         setCampaigns((prev) => [data.campaign, ...prev]);
       }
     } catch (err) {
@@ -109,15 +130,27 @@ export default function CampaignPicker({ journey }) {
     }
     setCreating(false);
     setNewCampaignName('');
+    setNewCampaignType('');
+    setNewCampaignBU('');
     setShowCreate(false);
   };
+
+  // Find the Business Unit field from metadata
+  const buField = metadata
+    ? Object.values(metadata).find(f =>
+        f.label.toLowerCase().includes('business unit') ||
+        f.name.toLowerCase().includes('businessunit') ||
+        f.name.toLowerCase().includes('business_unit') ||
+        f.name === 'BU__c'
+      )
+    : null;
+
+  const typeField = metadata?.Type || null;
 
   // Get current campaign name
   const currentCampaignName = (() => {
     if (!journey?.sf_campaign_id) return null;
-    // Check if we already cached the name
     if (journey._campaignName) return journey._campaignName;
-    // Try finding in the loaded campaigns
     const found = campaigns.find((c) => c.id === journey.sf_campaign_id);
     return found ? found.name : 'Campaign ' + journey.sf_campaign_id.substring(0, 8);
   })();
@@ -171,6 +204,35 @@ export default function CampaignPicker({ journey }) {
                     onKeyDown={(e) => e.key === 'Enter' && handleCreateCampaign()}
                     autoFocus
                   />
+
+                  {/* Campaign Type dropdown */}
+                  {typeField && typeField.values.length > 0 && (
+                    <select
+                      style={styles.createSelect}
+                      value={newCampaignType}
+                      onChange={(e) => setNewCampaignType(e.target.value)}
+                    >
+                      <option value="">— Type (optional) —</option>
+                      {typeField.values.map((v) => (
+                        <option key={v.value} value={v.value}>{v.label}</option>
+                      ))}
+                    </select>
+                  )}
+
+                  {/* Business Unit dropdown */}
+                  {buField && buField.values.length > 0 && (
+                    <select
+                      style={styles.createSelect}
+                      value={newCampaignBU}
+                      onChange={(e) => setNewCampaignBU(e.target.value)}
+                    >
+                      <option value="">— {buField.label} (optional) —</option>
+                      {buField.values.map((v) => (
+                        <option key={v.value} value={v.value}>{v.label}</option>
+                      ))}
+                    </select>
+                  )}
+
                   <div style={styles.createActions}>
                     <button
                       style={styles.createSubmitBtn}
@@ -315,7 +377,7 @@ const styles = {
     top: '100%',
     right: 0,
     marginTop: '4px',
-    width: '320px',
+    width: '340px',
     background: '#fff',
     border: '1px solid #e5e5e5',
     borderRadius: '10px',
@@ -363,6 +425,16 @@ const styles = {
     fontSize: '13px',
     outline: 'none',
     boxSizing: 'border-box',
+  },
+  createSelect: {
+    width: '100%',
+    padding: '7px 10px',
+    border: '1px solid #d1d5db',
+    borderRadius: '6px',
+    fontSize: '12px',
+    background: '#fff',
+    boxSizing: 'border-box',
+    color: '#475569',
   },
   createActions: {
     display: 'flex',

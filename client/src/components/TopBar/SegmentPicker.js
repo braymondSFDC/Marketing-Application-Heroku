@@ -2,13 +2,17 @@ import React, { useState, useEffect, useRef } from 'react';
 import useJourneyStore from '../../store/journeyStore';
 
 const TYPE_ICONS = {
+  data_cloud_segment: '🔷',
   object: '👤',
+  listview: '📋',
   campaign: '📣',
   report: '📊',
 };
 
 const TYPE_LABELS = {
+  data_cloud_segment: 'Data Cloud Segment',
   object: 'Object',
+  listview: 'List View',
   campaign: 'Campaign',
   report: 'Report',
 };
@@ -62,16 +66,29 @@ export default function SegmentPicker({ journey }) {
     setIsOpen(false);
     setSearch('');
     try {
+      let segment_filter;
+      switch (segment.type) {
+        case 'data_cloud_segment':
+          segment_filter = { type: 'data_cloud_segment', segmentId: segment.id, name: segment.name };
+          break;
+        case 'campaign':
+          segment_filter = { type: 'campaign', campaignId: segment.id, name: segment.name };
+          break;
+        case 'report':
+          segment_filter = { type: 'report', reportId: segment.id, name: segment.name };
+          break;
+        case 'listview':
+          segment_filter = { type: 'listview', listviewId: segment.id, name: segment.name, object: segment.object };
+          break;
+        default:
+          segment_filter = { type: 'object', object: segment.object };
+      }
       await fetch(`/api/journeys/${currentJourney.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           segment_object: segment.object || segment.type,
-          segment_filter: segment.type === 'campaign'
-            ? { type: 'campaign', campaignId: segment.id, name: segment.name }
-            : segment.type === 'report'
-            ? { type: 'report', reportId: segment.id, name: segment.name }
-            : { type: 'object', object: segment.object },
+          segment_filter,
         }),
       });
     } catch (err) {
@@ -82,6 +99,10 @@ export default function SegmentPicker({ journey }) {
   // Get the currently selected segment info
   const currentSegment = (() => {
     const filter = journey?.segment_filter;
+    if (filter?.segmentId) {
+      const found = segments.find((s) => s.id === filter.segmentId);
+      return found ? `🔷 ${found.name}` : filter.name || 'Data Cloud Segment';
+    }
     if (filter?.campaignId) {
       const found = segments.find((s) => s.id === filter.campaignId);
       return found ? found.name : filter.name || 'Campaign';
@@ -89,6 +110,10 @@ export default function SegmentPicker({ journey }) {
     if (filter?.reportId) {
       const found = segments.find((s) => s.id === filter.reportId);
       return found ? found.name : filter.name || 'Report';
+    }
+    if (filter?.listviewId) {
+      const found = segments.find((s) => s.id === filter.listviewId);
+      return found ? `📋 ${found.name}` : filter.name || 'List View';
     }
     return journey?.segment_object === 'Lead' ? 'All Leads' : 'All Contacts';
   })();
@@ -100,7 +125,9 @@ export default function SegmentPicker({ journey }) {
 
   // Group segments by type
   const grouped = {
+    data_cloud_segment: filtered.filter((s) => s.type === 'data_cloud_segment'),
     object: filtered.filter((s) => s.type === 'object'),
+    listview: filtered.filter((s) => s.type === 'listview'),
     campaign: filtered.filter((s) => s.type === 'campaign'),
     report: filtered.filter((s) => s.type === 'report'),
   };
@@ -157,7 +184,7 @@ export default function SegmentPicker({ journey }) {
 
           {/* Segment groups */}
           <div style={styles.list}>
-            {['object', 'campaign', 'report'].map((type) => {
+            {['data_cloud_segment', 'object', 'listview', 'campaign', 'report'].map((type) => {
               const items = grouped[type];
               if (!items || items.length === 0) return null;
               return (
@@ -187,6 +214,12 @@ export default function SegmentPicker({ journey }) {
                       </div>
                       {seg.status && (
                         <span style={styles.itemMeta}>{seg.status}</span>
+                      )}
+                      {seg.segmentType && (
+                        <span style={styles.itemMeta}>{seg.segmentType}</span>
+                      )}
+                      {seg.description && seg.type === 'data_cloud_segment' && (
+                        <span style={styles.itemMeta}>{seg.description.slice(0, 60)}{seg.description.length > 60 ? '...' : ''}</span>
                       )}
                       {seg.folder && (
                         <span style={styles.itemMeta}>{seg.folder}</span>

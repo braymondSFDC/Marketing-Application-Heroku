@@ -3,8 +3,11 @@ import React, { useState, useEffect } from 'react';
 /**
  * SalesforceConnect — Shows Salesforce connection status and
  * provides a button to connect via OAuth or disconnect.
+ *
+ * Props:
+ *   compact — if true, renders a smaller version for the canvas header bar
  */
-export default function SalesforceConnect() {
+export default function SalesforceConnect({ compact = false }) {
   const [status, setStatus] = useState({ connected: false });
   const [loading, setLoading] = useState(true);
 
@@ -24,7 +27,6 @@ export default function SalesforceConnect() {
   };
 
   const handleConnect = () => {
-    // Redirect to Salesforce OAuth — the server handles the flow
     window.location.href = '/auth/salesforce';
   };
 
@@ -32,7 +34,6 @@ export default function SalesforceConnect() {
     try {
       await fetch('/auth/disconnect', { method: 'POST' });
       setStatus({ connected: false });
-      // Reload to clear any cached SF data
       window.location.reload();
     } catch (err) {
       console.error('Failed to disconnect:', err);
@@ -42,18 +43,39 @@ export default function SalesforceConnect() {
   if (loading) return null;
 
   if (status.connected) {
+    if (compact) {
+      return (
+        <div style={styles.compactConnected}>
+          <span style={styles.greenDot} />
+          <span style={styles.compactText}>
+            Connected · {status.fullName || status.userName}
+          </span>
+          <button style={styles.compactDisconnect} onClick={handleDisconnect} title="Disconnect">
+            ✕
+          </button>
+        </div>
+      );
+    }
     return (
       <div style={styles.connectedContainer}>
         <div style={styles.connectedBadge}>
           <span style={styles.greenDot} />
           <span style={styles.connectedText}>
-            Connected as {status.fullName || status.userName}
+            Connected · {status.fullName || status.userName}
           </span>
         </div>
         <button style={styles.disconnectBtn} onClick={handleDisconnect} title="Disconnect from Salesforce">
           Disconnect
         </button>
       </div>
+    );
+  }
+
+  if (compact) {
+    return (
+      <button style={styles.compactConnectBtn} onClick={handleConnect}>
+        🔐 Connect SF
+      </button>
     );
   }
 
@@ -80,6 +102,20 @@ const styles = {
     whiteSpace: 'nowrap',
     transition: 'background 0.15s ease',
   },
+  compactConnectBtn: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '4px',
+    padding: '5px 10px',
+    background: '#0176d3',
+    color: '#fff',
+    border: 'none',
+    borderRadius: '6px',
+    fontSize: '12px',
+    fontWeight: '600',
+    cursor: 'pointer',
+    whiteSpace: 'nowrap',
+  },
   connectedContainer: {
     display: 'flex',
     alignItems: 'center',
@@ -92,6 +128,15 @@ const styles = {
     padding: '6px 12px',
     background: '#e6f9ec',
     borderRadius: '8px',
+    border: '1px solid #c8ecd2',
+  },
+  compactConnected: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '6px',
+    padding: '4px 10px',
+    background: '#e6f9ec',
+    borderRadius: '6px',
     border: '1px solid #c8ecd2',
   },
   greenDot: {
@@ -107,6 +152,12 @@ const styles = {
     color: '#2e844a',
     whiteSpace: 'nowrap',
   },
+  compactText: {
+    fontSize: '11px',
+    fontWeight: '600',
+    color: '#2e844a',
+    whiteSpace: 'nowrap',
+  },
   disconnectBtn: {
     padding: '6px 10px',
     background: 'none',
@@ -116,5 +167,14 @@ const styles = {
     fontSize: '12px',
     cursor: 'pointer',
     whiteSpace: 'nowrap',
+  },
+  compactDisconnect: {
+    background: 'none',
+    border: 'none',
+    color: '#6b7280',
+    fontSize: '11px',
+    cursor: 'pointer',
+    padding: '0 2px',
+    lineHeight: 1,
   },
 };

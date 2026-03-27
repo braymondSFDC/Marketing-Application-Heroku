@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import useJourneyStore from '../../store/journeyStore';
+import SalesforceConnect from './SalesforceConnect';
 import SegmentPicker from './SegmentPicker';
 import CampaignPicker from './CampaignPicker';
 import LaunchButton from './LaunchButton';
@@ -133,6 +134,8 @@ export default function JourneyHeader({
       </div>
 
       <div style={styles.right}>
+        <SalesforceConnect compact />
+        <div style={styles.divider} />
         {/* Save button */}
         <button
           style={{
@@ -274,5 +277,11 @@ const styles = {
     fontSize: '12px',
     color: '#94a3b8',
     fontStyle: 'italic',
+  },
+  divider: {
+    width: '1px',
+    height: '24px',
+    background: '#e5e5e5',
+    flexShrink: 0,
   },
 };

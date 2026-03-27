@@ -3,14 +3,13 @@
 const express = require('express');
 const router = express.Router();
 const { requireAuth } = require('../middleware/auth');
+const { getSalesforceConnection, getWorkerConnection, describeObject } = require('../services/salesforce');
 
 router.use(requireAuth);
 
 /**
  * Default field definitions for standalone mode.
- * In Canvas mode, these come live from Salesforce via describeObject.
- * Here we provide the most common Lead/Contact fields for the
- * Personalization Engine field picker.
+ * When connected to Salesforce, live fields are fetched via describeObject.
  */
 const STANDALONE_FIELDS = {
   Contact: [
@@ -82,54 +81,84 @@ const STANDALONE_FIELDS = {
 };
 
 /**
+ * Helper to get a Salesforce connection from request
+ */
+function getConnection(req) {
+  const hasUserOAuth = req.sfOauthToken && req.sfInstanceUrl;
+  const hasWorkerAuth = process.env.SF_CLIENT_ID && process.env.SF_CLIENT_SECRET;
+
+  if (!hasUserOAuth && !hasWorkerAuth) return null;
+
+  if (hasUserOAuth) {
+    return { conn: getSalesforceConnection(req.sfOauthToken, req.sfInstanceUrl), connected: true };
+  }
+  return { connPromise: getWorkerConnection(), connected: true };
+}
+
+/**
+ * Format field list into the standard response shape.
+ */
+function formatFieldResponse(objectName, fields) {
+  const grouped = { standard: [], custom: [], related: [] };
+
+  for (const field of fields) {
+    if (field.referenceTo && field.referenceTo.length > 0) {
+      grouped.related.push(field);
+    } else if (field.custom) {
+      grouped.custom.push(field);
+    } else {
+      grouped.standard.push(field);
+    }
+  }
+
+  return {
+    objectName,
+    totalFields: fields.length,
+    fields: grouped,
+    allFields: fields.map((f) => ({
+      name: f.name,
+      label: f.label,
+      type: f.type,
+      custom: f.custom,
+      mergeField: `{{${objectName}.${f.name}}}`,
+    })),
+  };
+}
+
+/**
  * GET /api/fields/:objectName
  *
- * Personalization Engine — returns available fields for the given object.
- * In standalone mode, returns predefined field definitions.
- * When Canvas is active, these would come live from Salesforce.
+ * Returns available fields for the given Salesforce object.
+ * When connected to Salesforce, fetches live field metadata.
+ * Otherwise, returns predefined standalone field definitions.
  */
 router.get('/:objectName', async (req, res) => {
   try {
     const { objectName } = req.params;
 
+    // Try to fetch live fields from Salesforce
+    const connInfo = getConnection(req);
+    if (connInfo) {
+      try {
+        const conn = connInfo.conn || await connInfo.connPromise;
+        const liveFields = await describeObject(conn, objectName);
+        return res.json(formatFieldResponse(objectName, liveFields));
+      } catch (sfErr) {
+        console.log(`[Fields] Could not describe ${objectName} from Salesforce, falling back to standalone:`, sfErr.message);
+        // Fall through to standalone fields
+      }
+    }
+
+    // Standalone fallback
     const allowed = Object.keys(STANDALONE_FIELDS);
     if (!allowed.includes(objectName)) {
       return res.status(400).json({
-        error: `Object not supported. Allowed: ${allowed.join(', ')}`,
+        error: `Object not supported in standalone mode. Allowed: ${allowed.join(', ')}. Connect to Salesforce for any object.`,
       });
     }
 
     const fields = STANDALONE_FIELDS[objectName];
-
-    // Group fields
-    const grouped = {
-      standard: [],
-      custom: [],
-      related: [],
-    };
-
-    for (const field of fields) {
-      if (field.referenceTo && field.referenceTo.length > 0) {
-        grouped.related.push(field);
-      } else if (field.custom) {
-        grouped.custom.push(field);
-      } else {
-        grouped.standard.push(field);
-      }
-    }
-
-    res.json({
-      objectName,
-      totalFields: fields.length,
-      fields: grouped,
-      allFields: fields.map((f) => ({
-        name: f.name,
-        label: f.label,
-        type: f.type,
-        custom: f.custom,
-        mergeField: `{{${objectName}.${f.name}}}`,
-      })),
-    });
+    res.json(formatFieldResponse(objectName, fields));
   } catch (err) {
     console.error('[Fields] Error:', err.message);
     res.status(500).json({ error: 'Failed to fetch fields' });

@@ -3,7 +3,7 @@
 const express = require('express');
 const router = express.Router();
 const { requireAuth } = require('../middleware/auth');
-const { getSalesforceConnection, getWorkerConnection, queryRecords } = require('../services/salesforce');
+const { getSalesforceConnection, getWorkerConnection, queryRecords, describeObject } = require('../services/salesforce');
 
 router.use(requireAuth);
 
@@ -11,23 +11,15 @@ router.use(requireAuth);
  * GET /api/segments
  *
  * Fetches available segments from the connected Salesforce org.
- * Returns Campaigns, Contact List Views, and Lead List Views
+ * Returns: Data Cloud Segments, Campaigns, List Views, and Reports
  * that can be used as journey entry audiences.
- *
- * Uses per-user OAuth tokens when the user has connected via Salesforce OAuth.
- * Falls back to worker connection (client credentials) if OAuth not available.
- * Returns static fallback data if no SF connection is configured at all.
  */
 router.get('/', async (req, res) => {
   try {
-    // Priority 1: Per-user OAuth tokens (user authenticated via OAuth flow)
-    // Priority 2: Worker connection (client credentials from env vars)
-    // Priority 3: Static fallback data
     const hasUserOAuth = req.sfOauthToken && req.sfInstanceUrl;
     const hasWorkerAuth = process.env.SF_CLIENT_ID && process.env.SF_CLIENT_SECRET;
 
     if (!hasUserOAuth && !hasWorkerAuth) {
-      // Return static fallback segments for standalone/demo mode
       return res.json({
         connected: false,
         segments: [
@@ -38,7 +30,6 @@ router.get('/', async (req, res) => {
       });
     }
 
-    // Get connection: prefer per-user OAuth, fall back to worker
     let conn;
     if (hasUserOAuth) {
       console.log('[Segments] Using per-user OAuth token');
@@ -48,7 +39,23 @@ router.get('/', async (req, res) => {
       conn = await getWorkerConnection();
     }
 
-    // Fetch Campaigns (most common segment source for marketing journeys)
+    // ── Fetch Data Cloud Segments (Segment objects) ──
+    let dataCloudSegments = [];
+    try {
+      dataCloudSegments = await queryRecords(
+        conn,
+        `SELECT Id, Name, SegmentStatus, Description, SegmentType, LastCalculatedDate
+         FROM Segment
+         WHERE SegmentStatus = 'Published'
+         ORDER BY LastModifiedDate DESC
+         LIMIT 50`
+      );
+    } catch (dcErr) {
+      // Data Cloud may not be enabled — that's ok
+      console.log('[Segments] Data Cloud segments not available:', dcErr.message);
+    }
+
+    // ── Fetch Campaigns ──
     const campaigns = await queryRecords(
       conn,
       `SELECT Id, Name, Type, Status, NumberOfContacts, NumberOfLeads, StartDate, EndDate
@@ -58,7 +65,33 @@ router.get('/', async (req, res) => {
        LIMIT 50`
     );
 
-    // Fetch Reports that are Contact/Lead focused (potential segments)
+    // ── Fetch Contact List Views ──
+    let contactListViews = [];
+    try {
+      const lvResult = await conn.request(`/services/data/v62.0/sobjects/Contact/listviews`);
+      contactListViews = (lvResult.listviews || []).slice(0, 20).map((lv) => ({
+        id: lv.id,
+        name: lv.label || lv.developerName,
+        soqlCompatible: lv.soqlCompatible,
+      }));
+    } catch (lvErr) {
+      console.log('[Segments] Could not fetch Contact list views:', lvErr.message);
+    }
+
+    // ── Fetch Lead List Views ──
+    let leadListViews = [];
+    try {
+      const lvResult = await conn.request(`/services/data/v62.0/sobjects/Lead/listviews`);
+      leadListViews = (lvResult.listviews || []).slice(0, 20).map((lv) => ({
+        id: lv.id,
+        name: lv.label || lv.developerName,
+        soqlCompatible: lv.soqlCompatible,
+      }));
+    } catch (lvErr) {
+      console.log('[Segments] Could not fetch Lead list views:', lvErr.message);
+    }
+
+    // ── Fetch Reports ──
     let reports = [];
     try {
       reports = await queryRecords(
@@ -70,20 +103,53 @@ router.get('/', async (req, res) => {
          LIMIT 30`
       );
     } catch (reportErr) {
-      // Report querying may fail if permissions are limited — that's ok
       console.warn('[Segments] Could not fetch reports:', reportErr.message);
     }
 
     // Build unified segment list
     const segments = [];
 
-    // Add standard object options
+    // Data Cloud segments first (highest value)
+    for (const s of dataCloudSegments) {
+      segments.push({
+        id: s.Id,
+        name: s.Name,
+        type: 'data_cloud_segment',
+        object: 'Segment',
+        status: s.SegmentStatus,
+        segmentType: s.SegmentType,
+        description: s.Description,
+        lastCalculated: s.LastCalculatedDate,
+      });
+    }
+
+    // Standard object options
     segments.push(
       { id: 'contact-all', name: 'All Contacts', type: 'object', object: 'Contact', count: null },
       { id: 'lead-all', name: 'All Leads', type: 'object', object: 'Lead', count: null }
     );
 
-    // Add campaigns
+    // Contact list views
+    for (const lv of contactListViews) {
+      segments.push({
+        id: lv.id,
+        name: lv.name,
+        type: 'listview',
+        object: 'Contact',
+      });
+    }
+
+    // Lead list views
+    for (const lv of leadListViews) {
+      segments.push({
+        id: lv.id,
+        name: lv.name,
+        type: 'listview',
+        object: 'Lead',
+      });
+    }
+
+    // Campaigns
     for (const c of campaigns) {
       segments.push({
         id: c.Id,
@@ -98,7 +164,7 @@ router.get('/', async (req, res) => {
       });
     }
 
-    // Add reports
+    // Reports
     for (const r of reports) {
       segments.push({
         id: r.Id,
@@ -114,13 +180,14 @@ router.get('/', async (req, res) => {
     res.json({
       connected: true,
       segments,
+      totalDataCloudSegments: dataCloudSegments.length,
       totalCampaigns: campaigns.length,
+      totalListViews: contactListViews.length + leadListViews.length,
       totalReports: reports.length,
     });
   } catch (err) {
     console.error('[Segments] Error fetching segments:', err.message);
 
-    // If Salesforce connection fails, still return fallback
     res.json({
       connected: false,
       segments: [

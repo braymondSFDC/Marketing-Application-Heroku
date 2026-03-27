@@ -18,7 +18,9 @@ export default function SplitNode({ data, selected }) {
       <Handle type="target" position={Position.Left} id="left" style={styles.handleTarget} />
       <div style={styles.header}>
         <span style={styles.icon}>⑂</span>
-        <span style={{ ...styles.type, color: '#0891b2' }}>A/B Split</span>
+        <span style={{ ...styles.type, color: '#0891b2' }}>
+          {data.winnerEnabled ? 'Experiment' : 'A/B Split'}
+        </span>
       </div>
       <div style={styles.label}>{data.name || 'A/B Split'}</div>
       <div style={styles.paths}>
@@ -28,11 +30,48 @@ export default function SplitNode({ data, selected }) {
           </div>
         ))}
       </div>
-      {/* Source handles: bottom (a/b) + right (a/b) */}
-      <Handle type="source" position={Position.Bottom} id="a" style={{ ...styles.handle, left: '30%' }} />
-      <Handle type="source" position={Position.Bottom} id="b" style={{ ...styles.handle, left: '70%' }} />
-      <Handle type="source" position={Position.Right} id="right-a" style={{ ...styles.handle, top: '35%' }} />
-      <Handle type="source" position={Position.Right} id="right-b" style={{ ...styles.handle, top: '65%' }} />
+      {data.winnerEnabled && (
+        <div style={styles.winnerBadge}>
+          🏆 Winner: {data.winnerMetric === 'open_rate' ? 'Open Rate' :
+            data.winnerMetric === 'click_rate' ? 'Click Rate' :
+            data.winnerMetric === 'conversion_rate' ? 'Conversion' :
+            data.winnerMetric === 'unsubscribe_rate' ? 'Lowest Unsub' :
+            'Open Rate'}
+        </div>
+      )}
+
+      {/* Dynamic source handles along bottom */}
+      {paths.map((p, i) => {
+        const pathId = p.label ? p.label.toLowerCase().replace(/\s+/g, '-') : `path-${i}`;
+        const pct = ((i + 1) / (paths.length + 1)) * 100;
+        return (
+          <Handle
+            key={pathId}
+            type="source"
+            position={Position.Bottom}
+            id={pathId}
+            style={{ ...styles.handle, left: `${pct}%` }}
+          />
+        );
+      })}
+
+      {/* Right-side handles for horizontal layout (first and last path) */}
+      {paths.length >= 2 && (
+        <>
+          <Handle
+            type="source"
+            position={Position.Right}
+            id={`right-${paths[0].label ? paths[0].label.toLowerCase().replace(/\s+/g, '-') : 'path-0'}`}
+            style={{ ...styles.handle, top: '35%' }}
+          />
+          <Handle
+            type="source"
+            position={Position.Right}
+            id={`right-${paths[paths.length - 1].label ? paths[paths.length - 1].label.toLowerCase().replace(/\s+/g, '-') : `path-${paths.length - 1}`}`}
+            style={{ ...styles.handle, top: '65%' }}
+          />
+        </>
+      )}
     </div>
   );
 }
@@ -67,6 +106,7 @@ const styles = {
   },
   paths: {
     display: 'flex',
+    flexWrap: 'wrap',
     gap: '6px',
     marginTop: '8px',
   },
@@ -77,6 +117,14 @@ const styles = {
     background: '#ecfeff',
     padding: '2px 8px',
     borderRadius: '10px',
+  },
+  winnerBadge: {
+    fontSize: '10px',
+    color: '#c05600',
+    background: '#fef4e8',
+    padding: '3px 8px',
+    borderRadius: '6px',
+    marginTop: '6px',
   },
   handle: {
     background: '#06b6d4',

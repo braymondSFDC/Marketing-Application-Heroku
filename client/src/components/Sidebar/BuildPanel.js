@@ -11,6 +11,7 @@ const NODE_CATEGORIES = [
     title: 'Actions',
     items: [
       { type: 'email', icon: '✉️', label: 'Email', description: 'Send an email' },
+      { type: 'sms', icon: '💬', label: 'SMS', description: 'Send an SMS message' },
     ],
   },
   {

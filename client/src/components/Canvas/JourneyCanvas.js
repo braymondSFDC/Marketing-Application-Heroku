@@ -18,6 +18,7 @@ import useJourneyStore from '../../store/journeyStore';
 
 import TriggerNode from './nodes/TriggerNode';
 import EmailNode from './nodes/EmailNode';
+import SmsNode from './nodes/SmsNode';
 import WaitNode from './nodes/WaitNode';
 import SplitNode from './nodes/SplitNode';
 import ConditionNode from './nodes/ConditionNode';
@@ -81,6 +82,7 @@ function useUndoRedo(nodes, edges, setNodes, setEdges) {
 const nodeTypes = {
   trigger: TriggerNode,
   email: EmailNode,
+  sms: SmsNode,
   wait: WaitNode,
   split: SplitNode,
   condition: ConditionNode,
@@ -320,6 +322,7 @@ function CanvasInner({ journeyId, onBack }) {
                 const colors = {
                   trigger: '#0176d3',
                   email: '#7c3aed',
+                  sms: '#16a34a',
                   wait: '#f59e0b',
                   split: '#06b6d4',
                   condition: '#f97316',

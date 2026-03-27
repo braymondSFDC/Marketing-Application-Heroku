@@ -23,6 +23,7 @@ const launchRoutes = require('./src/api/routes/launch');
 const fieldRoutes = require('./src/api/routes/fields');
 const segmentRoutes = require('./src/api/routes/segments');
 const campaignRoutes = require('./src/api/routes/campaigns');
+const contentRoutes = require('./src/api/routes/content');
 const webhookRoutes = require('./src/api/routes/webhooks');
 
 const app = express();
@@ -108,6 +109,7 @@ app.use('/api/journeys', launchRoutes);
 app.use('/api/fields', fieldRoutes);
 app.use('/api/segments', segmentRoutes);
 app.use('/api/campaigns', campaignRoutes);
+app.use('/api/content', contentRoutes);
 app.use('/api/webhooks', webhookRoutes);
 
 // Health check

@@ -2,6 +2,12 @@ import React from 'react';
 import { Handle, Position } from '@xyflow/react';
 
 export default function ConditionNode({ data, selected }) {
+  // Support multi-branch: data.branches array or fallback to legacy yes/no
+  const branches = data.branches || [];
+  const hasBranches = branches.length > 0;
+  // Total outputs = branch count + 1 for default
+  const outputCount = hasBranches ? branches.length + 1 : 2;
+
   return (
     <div style={{
       ...styles.node,
@@ -16,20 +22,68 @@ export default function ConditionNode({ data, selected }) {
         <span style={{ ...styles.type, color: '#ea580c' }}>Condition</span>
       </div>
       <div style={styles.label}>{data.name || 'Condition Check'}</div>
-      {data.field && (
+
+      {/* Legacy single-condition display */}
+      {!hasBranches && data.field && (
         <div style={styles.condition}>
           {data.field} {data.operator || '='} {data.value || '?'}
         </div>
       )}
+
+      {/* Multi-branch display */}
       <div style={styles.branches}>
-        <span style={{ ...styles.branchLabel, color: '#2e844a' }}>✓ Yes</span>
-        <span style={{ ...styles.branchLabel, color: '#ea001e' }}>✗ No</span>
+        {hasBranches ? (
+          <>
+            {branches.map((b, i) => (
+              <span key={b.id || i} style={{ ...styles.branchLabel, color: '#2e844a' }}>
+                {b.label || `Branch ${i + 1}`}
+              </span>
+            ))}
+            <span style={{ ...styles.branchLabel, color: '#6b7280', fontStyle: 'italic' }}>
+              Default
+            </span>
+          </>
+        ) : (
+          <>
+            <span style={{ ...styles.branchLabel, color: '#2e844a' }}>✓ Yes</span>
+            <span style={{ ...styles.branchLabel, color: '#ea001e' }}>✗ No</span>
+          </>
+        )}
       </div>
-      {/* Source handles: bottom (yes/no) + right (yes/no) */}
-      <Handle type="source" position={Position.Bottom} id="yes" style={{ ...styles.handle, left: '30%' }} />
-      <Handle type="source" position={Position.Bottom} id="no" style={{ ...styles.handle, left: '70%' }} />
-      <Handle type="source" position={Position.Right} id="right-yes" style={{ ...styles.handle, top: '35%' }} />
-      <Handle type="source" position={Position.Right} id="right-no" style={{ ...styles.handle, top: '65%' }} />
+
+      {/* Dynamic source handles along bottom */}
+      {hasBranches ? (
+        <>
+          {branches.map((b, i) => {
+            const pct = ((i + 1) / (outputCount + 1)) * 100;
+            return (
+              <Handle
+                key={b.id || `branch-${i}`}
+                type="source"
+                position={Position.Bottom}
+                id={b.id || `branch-${i}`}
+                style={{ ...styles.handle, left: `${pct}%` }}
+              />
+            );
+          })}
+          {/* Default handle */}
+          <Handle
+            type="source"
+            position={Position.Bottom}
+            id="default"
+            style={{ ...styles.handle, left: `${(outputCount / (outputCount + 1)) * 100}%` }}
+          />
+          {/* Right side handles for horizontal layouts */}
+          <Handle type="source" position={Position.Right} id="right-default" style={{ ...styles.handle, top: '70%' }} />
+        </>
+      ) : (
+        <>
+          <Handle type="source" position={Position.Bottom} id="yes" style={{ ...styles.handle, left: '30%' }} />
+          <Handle type="source" position={Position.Bottom} id="no" style={{ ...styles.handle, left: '70%' }} />
+          <Handle type="source" position={Position.Right} id="right-yes" style={{ ...styles.handle, top: '35%' }} />
+          <Handle type="source" position={Position.Right} id="right-no" style={{ ...styles.handle, top: '65%' }} />
+        </>
+      )}
     </div>
   );
 }
@@ -73,7 +127,8 @@ const styles = {
   },
   branches: {
     display: 'flex',
-    justifyContent: 'space-between',
+    flexWrap: 'wrap',
+    gap: '6px',
     marginTop: '8px',
     paddingTop: '8px',
     borderTop: '1px solid #f1f5f9',
