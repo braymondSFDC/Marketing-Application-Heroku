@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import useJourneyStore from '../../store/journeyStore';
 import SegmentPicker from './SegmentPicker';
+import CampaignPicker from './CampaignPicker';
 import LaunchButton from './LaunchButton';
 
 const STATUS_CONFIG = {
@@ -143,6 +144,7 @@ export default function JourneyHeader({
         >
           💾 Save
         </button>
+        <CampaignPicker journey={journey} />
         <SegmentPicker journey={journey} />
         <LaunchButton journey={journey} />
       </div>

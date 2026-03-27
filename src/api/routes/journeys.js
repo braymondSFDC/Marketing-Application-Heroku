@@ -100,7 +100,7 @@ router.post('/', async (req, res) => {
  */
 router.put('/:id', async (req, res) => {
   try {
-    const { name, segment_object, segment_filter, canvas_state, status } = req.body;
+    const { name, segment_object, segment_filter, canvas_state, status, sf_campaign_id } = req.body;
 
     // Verify ownership
     const existing = await db.query(
@@ -124,10 +124,11 @@ router.put('/:id', async (req, res) => {
            segment_filter = COALESCE($3, segment_filter),
            canvas_state = COALESCE($4, canvas_state),
            status = COALESCE($5, status),
+           sf_campaign_id = COALESCE($6, sf_campaign_id),
            updated_at = NOW()
-       WHERE id = $6 AND sf_org_id = $7
+       WHERE id = $7 AND sf_org_id = $8
        RETURNING *`,
-      [name, segment_object, segment_filter, canvas_state, status, req.params.id, req.sfOrgId]
+      [name, segment_object, segment_filter, canvas_state, status, sf_campaign_id, req.params.id, req.sfOrgId]
     );
 
     res.json({ journey: result.rows[0] });

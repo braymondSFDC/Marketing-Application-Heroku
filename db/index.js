@@ -219,8 +219,26 @@ if (hasDatabase) {
       return { rows: [] };
     }
 
-    // ── UPDATE journeys SET (full update — 7 params) ──
-    if (/UPDATE journeys/i.test(sql) && params && params.length >= 7) {
+    // ── UPDATE journeys SET (full update — 8 params with sf_campaign_id) ──
+    if (/UPDATE journeys/i.test(sql) && params && params.length === 8) {
+      // params: [name, segment_object, segment_filter, canvas_state, status, sf_campaign_id, id, sf_org_id]
+      const idx = store.journeys.findIndex(j => j.id === params[6] && j.sf_org_id === params[7]);
+      if (idx >= 0) {
+        const j = store.journeys[idx];
+        if (params[0] != null) j.name = params[0];
+        if (params[1] != null) j.segment_object = params[1];
+        if (params[2] != null) j.segment_filter = params[2];
+        if (params[3] != null) j.canvas_state = params[3];
+        if (params[4] != null) j.status = params[4];
+        if (params[5] != null) j.sf_campaign_id = params[5];
+        j.updated_at = new Date().toISOString();
+        return { rows: [j] };
+      }
+      return { rows: [] };
+    }
+
+    // ── UPDATE journeys SET (legacy 7 params — backward compatibility) ──
+    if (/UPDATE journeys/i.test(sql) && params && params.length === 7) {
       // params: [name, segment_object, segment_filter, canvas_state, status, id, sf_org_id]
       const idx = store.journeys.findIndex(j => j.id === params[5] && j.sf_org_id === params[6]);
       if (idx >= 0) {
@@ -269,7 +287,7 @@ if (hasDatabase) {
     }
 
     // ── DELETE FROM journey_nodes WHERE id = $1 AND journey_id = $2 ──
-    if (/DELETE FROM journey_nodes WHERE id/i.test(sql)) {
+    if (/DELETE FROM journey_nodes WHERE id =/i.test(sql)) {
       const before = store.journey_nodes.length;
       store.journey_nodes = store.journey_nodes.filter(
         n => !(n.id === params[0] && n.journey_id === params[1])
@@ -289,7 +307,7 @@ if (hasDatabase) {
     }
 
     // ── DELETE FROM journey_edges WHERE id = $1 AND journey_id = $2 ──
-    if (/DELETE FROM journey_edges WHERE id/i.test(sql)) {
+    if (/DELETE FROM journey_edges WHERE id =/i.test(sql)) {
       const before = store.journey_edges.length;
       store.journey_edges = store.journey_edges.filter(
         e => !(e.id === params[0] && e.journey_id === params[1])

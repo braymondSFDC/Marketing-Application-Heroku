@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import useJourneyStore from '../store/journeyStore';
+import SalesforceConnect from './TopBar/SalesforceConnect';
 
 const STATUS_COLORS = {
   draft: { bg: '#f1f5f9', text: '#475569' },
@@ -36,6 +37,9 @@ export default function JourneyList({ onSelectJourney }) {
 
   return (
     <div style={styles.container}>
+      <div style={styles.topBar}>
+        <SalesforceConnect />
+      </div>
       <div style={styles.header}>
         <div>
           <h1 style={styles.title}>Journey Builder</h1>
@@ -108,6 +112,7 @@ export default function JourneyList({ onSelectJourney }) {
 
 const styles = {
   container: { maxWidth: '1000px', margin: '0 auto', padding: '32px 24px' },
+  topBar: { display: 'flex', justifyContent: 'flex-end', marginBottom: '16px' },
   header: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' },
   title: { fontSize: '24px', fontWeight: '700', color: '#181818', margin: '0' },
   subtitle: { fontSize: '14px', color: '#6b7280', margin: '4px 0 0 0' },

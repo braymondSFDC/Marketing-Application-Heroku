@@ -22,6 +22,7 @@ const nodeRoutes = require('./src/api/routes/nodes');
 const launchRoutes = require('./src/api/routes/launch');
 const fieldRoutes = require('./src/api/routes/fields');
 const segmentRoutes = require('./src/api/routes/segments');
+const campaignRoutes = require('./src/api/routes/campaigns');
 const webhookRoutes = require('./src/api/routes/webhooks');
 
 const app = express();
@@ -34,7 +35,7 @@ const server = http.createServer(app);
 app.use(morgan('combined'));
 app.use(compression());
 
-// Helmet — standalone mode (no iframe embedding needed)
+// Helmet — standalone mode with Salesforce OAuth support
 app.use(
   helmet({
     contentSecurityPolicy: {
@@ -44,7 +45,8 @@ app.use(
         styleSrc: ["'self'", "'unsafe-inline'", 'fonts.googleapis.com'],
         fontSrc: ["'self'", 'fonts.gstatic.com'],
         imgSrc: ["'self'", 'data:', 'blob:'],
-        connectSrc: ["'self'", 'wss:', 'ws:'],
+        connectSrc: ["'self'", 'wss:', 'ws:', 'https://login.salesforce.com', 'https://*.salesforce.com', 'https://*.force.com'],
+        formAction: ["'self'", 'https://login.salesforce.com', 'https://*.salesforce.com'],
       },
     },
   })
@@ -105,6 +107,7 @@ app.use('/api/journeys', nodeRoutes);
 app.use('/api/journeys', launchRoutes);
 app.use('/api/fields', fieldRoutes);
 app.use('/api/segments', segmentRoutes);
+app.use('/api/campaigns', campaignRoutes);
 app.use('/api/webhooks', webhookRoutes);
 
 // Health check

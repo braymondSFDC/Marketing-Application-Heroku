@@ -3,7 +3,7 @@
 const express = require('express');
 const router = express.Router();
 const { requireAuth } = require('../middleware/auth');
-const { getWorkerConnection, queryRecords } = require('../services/salesforce');
+const { getSalesforceConnection, getWorkerConnection, queryRecords } = require('../services/salesforce');
 
 router.use(requireAuth);
 
@@ -14,15 +14,19 @@ router.use(requireAuth);
  * Returns Campaigns, Contact List Views, and Lead List Views
  * that can be used as journey entry audiences.
  *
- * When SF_CLIENT_ID + SF_CLIENT_SECRET are not set, returns
- * static fallback data so the app remains functional.
+ * Uses per-user OAuth tokens when the user has connected via Salesforce OAuth.
+ * Falls back to worker connection (client credentials) if OAuth not available.
+ * Returns static fallback data if no SF connection is configured at all.
  */
 router.get('/', async (req, res) => {
   try {
-    // Check if Salesforce OAuth credentials are configured
-    const hasOAuth = process.env.SF_CLIENT_ID && process.env.SF_CLIENT_SECRET;
+    // Priority 1: Per-user OAuth tokens (user authenticated via OAuth flow)
+    // Priority 2: Worker connection (client credentials from env vars)
+    // Priority 3: Static fallback data
+    const hasUserOAuth = req.sfOauthToken && req.sfInstanceUrl;
+    const hasWorkerAuth = process.env.SF_CLIENT_ID && process.env.SF_CLIENT_SECRET;
 
-    if (!hasOAuth) {
+    if (!hasUserOAuth && !hasWorkerAuth) {
       // Return static fallback segments for standalone/demo mode
       return res.json({
         connected: false,
@@ -30,20 +34,19 @@ router.get('/', async (req, res) => {
           { id: 'contact-all', name: 'All Contacts', type: 'object', object: 'Contact', count: null },
           { id: 'lead-all', name: 'All Leads', type: 'object', object: 'Lead', count: null },
         ],
-        message: 'Salesforce not connected. Configure OAuth credentials to fetch live segments.',
+        message: 'Salesforce not connected. Click "Connect to Salesforce" to fetch live segments.',
       });
     }
 
-    // Log auth config state (without revealing secrets)
-    console.log('[Segments] Auth config:', {
-      hasClientId: !!process.env.SF_CLIENT_ID,
-      hasClientSecret: !!process.env.SF_CLIENT_SECRET,
-      hasUsername: !!process.env.SF_USERNAME,
-      hasPassword: !!process.env.SF_PASSWORD,
-      loginUrl: process.env.SF_LOGIN_URL || '(not set, using default)',
-    });
-
-    const conn = await getWorkerConnection();
+    // Get connection: prefer per-user OAuth, fall back to worker
+    let conn;
+    if (hasUserOAuth) {
+      console.log('[Segments] Using per-user OAuth token');
+      conn = getSalesforceConnection(req.sfOauthToken, req.sfInstanceUrl);
+    } else {
+      console.log('[Segments] Using worker connection (client credentials)');
+      conn = await getWorkerConnection();
+    }
 
     // Fetch Campaigns (most common segment source for marketing journeys)
     const campaigns = await queryRecords(

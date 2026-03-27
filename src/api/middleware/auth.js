@@ -58,7 +58,8 @@ function getDefaultOrgContext() {
 /**
  * Express middleware — ensures a valid session context exists.
  *
- * In standalone mode, auto-initializes the session with default org context.
+ * If the user has authenticated via Salesforce OAuth, uses their tokens.
+ * Otherwise, falls back to standalone defaults so the app works without SF.
  * Attaches convenience properties to req for route handlers.
  */
 function requireAuth(req, res, next) {
@@ -68,10 +69,23 @@ function requireAuth(req, res, next) {
 
   const ctx = req.session.appContext;
 
-  req.sfOrgId = ctx.orgId;
-  req.sfUserId = ctx.userId;
-  req.sfInstanceUrl = ctx.instanceUrl || null;
-  req.sfOauthToken = ctx.oauthToken || null;
+  // Use OAuth tokens when user has connected via Salesforce
+  if (ctx.oauthConnected && ctx.oauthToken) {
+    req.sfOrgId = ctx.orgId;
+    req.sfUserId = ctx.userId;
+    req.sfInstanceUrl = ctx.instanceUrl;
+    req.sfOauthToken = ctx.oauthToken;
+    req.sfRefreshToken = ctx.refreshToken || null;
+    req.sfConnected = true;
+  } else {
+    // Standalone mode — fall back to env var defaults
+    req.sfOrgId = ctx.orgId;
+    req.sfUserId = ctx.userId;
+    req.sfInstanceUrl = ctx.instanceUrl || null;
+    req.sfOauthToken = null;
+    req.sfRefreshToken = null;
+    req.sfConnected = false;
+  }
 
   next();
 }
