@@ -31,13 +31,23 @@ router.get('/salesforce', (req, res) => {
   const state = crypto.randomBytes(16).toString('hex');
   req.session.oauthState = state;
 
+  // PKCE — generate code_verifier and code_challenge
+  const codeVerifier = crypto.randomBytes(32).toString('base64url');
+  req.session.codeVerifier = codeVerifier;
+  const codeChallenge = crypto
+    .createHash('sha256')
+    .update(codeVerifier)
+    .digest('base64url');
+
   const authUrl =
     `${SF_LOGIN_URL}/services/oauth2/authorize?` +
     `response_type=code` +
     `&client_id=${encodeURIComponent(clientId)}` +
     `&redirect_uri=${encodeURIComponent(callbackUrl)}` +
     `&scope=${encodeURIComponent('api refresh_token web full')}` +
-    `&state=${state}`;
+    `&state=${state}` +
+    `&code_challenge=${codeChallenge}` +
+    `&code_challenge_method=S256`;
 
   console.log('[Auth] Redirecting to Salesforce OAuth:', authUrl.split('?')[0]);
   res.redirect(authUrl);
@@ -74,16 +84,23 @@ router.get('/salesforce/callback', async (req, res) => {
     const clientId = process.env.SF_CLIENT_ID;
     const clientSecret = process.env.SF_CLIENT_SECRET;
     const callbackUrl = process.env.SF_CALLBACK_URL;
+    const codeVerifier = req.session.codeVerifier;
+    delete req.session.codeVerifier;
 
-    // Exchange code for tokens
+    // Exchange code for tokens (with PKCE code_verifier)
     const tokenUrl = `${SF_LOGIN_URL}/services/oauth2/token`;
-    const params = new URLSearchParams({
+    const tokenParams = {
       grant_type: 'authorization_code',
       code,
       client_id: clientId,
-      client_secret: clientSecret,
       redirect_uri: callbackUrl,
-    });
+      code_verifier: codeVerifier,
+    };
+    // Include client_secret only if set (some Connected Apps don't require it with PKCE)
+    if (clientSecret) {
+      tokenParams.client_secret = clientSecret;
+    }
+    const params = new URLSearchParams(tokenParams);
 
     const tokenRes = await fetch(tokenUrl, {
       method: 'POST',
